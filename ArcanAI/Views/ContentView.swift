@@ -35,11 +35,21 @@ struct ContentView: View {
             // Stars
             GeometryReader { geometry in
                 ForEach(0..<150, id: \.self) { index in
-                    let starSeed = Double(index) * 0.618033988749895 // Golden ratio for distribution
-                    let opacity = 0.3 + (starSeed.truncatingRemainder(dividingBy: 1.0) * 0.7)
-                    let size = 1.0 + ((starSeed * 7.3).truncatingRemainder(dividingBy: 1.0) * 1.5)
-                    let x = (starSeed * geometry.size.width * 2.7).truncatingRemainder(dividingBy: geometry.size.width)
-                    let y = ((starSeed + 0.5) * geometry.size.height * 3.1).truncatingRemainder(dividingBy: geometry.size.height)
+                    // Use multiple prime numbers for pseudo-random distribution
+                    let seed1 = Double(index) * 12.9898
+                    let seed2 = Double(index) * 78.233
+                    let seed3 = Double(index) * 43.758
+
+                    // Create pseudo-random values using sine functions
+                    let randomX = abs(sin(seed1) * 43758.5453123).truncatingRemainder(dividingBy: 1.0)
+                    let randomY = abs(sin(seed2) * 43758.5453123).truncatingRemainder(dividingBy: 1.0)
+                    let randomSize = abs(sin(seed3) * 43758.5453123).truncatingRemainder(dividingBy: 1.0)
+                    let randomOpacity = abs(sin(seed1 * 2.0) * 43758.5453123).truncatingRemainder(dividingBy: 1.0)
+
+                    let opacity = 0.3 + (randomOpacity * 0.7)
+                    let size = 1.0 + (randomSize * 1.5)
+                    let x = randomX * geometry.size.width
+                    let y = randomY * geometry.size.height
 
                     Circle()
                         .fill(Color.white.opacity(opacity))
