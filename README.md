@@ -36,3 +36,26 @@ ArcanAI lets you run open-source Ollama models **entirely on your iPhone or iPad
 - No crash reporting
 - No network calls after setup
 
+---
+
+## Recent Updates
+
+### Latest Features
+- **Landing Page & Model Selector** — Added intuitive UI for browsing and selecting models before download
+- **Chat Interface** — Implemented ChatGPT-style conversation view with streaming responses and message history
+- **Core ML Integration** — Built complete inference pipeline using llama.cpp with Core ML acceleration
+- **Model Management** — Added download, caching, and switching capabilities for multiple models
+- **Conversation System** — Implemented message persistence and conversation history management
+
+### Developer Improvements
+- **CI/CD Integration** — Added GitHub Actions workflow for automated Claude Code PR reviews
+- **Project Structure** — Organized codebase with clear separation: Views, Models, Services
+- **Requirements Analysis** — Documented comprehensive technical requirements and architecture decisions
+- **llama.cpp Submodule** — Integrated official llama.cpp as git submodule for native inference
+
+### Technical Stack
+- SwiftUI for modern, declarative UI
+- Core ML + Neural Engine for on-device acceleration
+- llama.cpp for LLM inference
+- Async/await for streaming token generation
+
