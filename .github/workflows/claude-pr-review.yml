@@ -1,0 +1,132 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    name: Review PR with Claude
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: pr-diff
+        run: |
+          # Get the base and head SHAs
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # Get the diff
+          git diff ${BASE_SHA}...${HEAD_SHA} > pr_diff.txt
+
+          # Also get file list
+          git diff --name-only ${BASE_SHA}...${HEAD_SHA} > changed_files.txt
+
+          echo "Files changed:"
+          cat changed_files.txt
+
+      - name: Review with Claude
+        id: claude-review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Read the diff
+          DIFF=$(cat pr_diff.txt)
+          FILES=$(cat changed_files.txt)
+
+          # Prepare the prompt
+          cat > prompt.json <<'EOF'
+          {
+            "model": "claude-sonnet-4-5-20250929",
+            "max_tokens": 4096,
+            "messages": [
+              {
+                "role": "user",
+                "content": "You are a senior software engineer reviewing a pull request. Please analyze the following code changes and provide:\n\n1. A brief summary of what the PR does\n2. Potential issues or bugs you notice\n3. Code quality and best practice suggestions\n4. Security concerns if any\n5. Overall assessment (APPROVE, REQUEST_CHANGES, or COMMENT)\n\nBe constructive and specific in your feedback.\n\nPR Title: ${{ github.event.pull_request.title }}\nPR Description: ${{ github.event.pull_request.body }}\n\nFiles changed:\n%%%FILES%%%\n\nDiff:\n```diff\n%%%DIFF%%%\n```"
+              }
+            ]
+          }
+          EOF
+
+          # Replace placeholders (handle special characters properly)
+          python3 <<'PYTHON'
+          import json
+          import os
+
+          with open('prompt.json', 'r') as f:
+              data = json.load(f)
+
+          with open('changed_files.txt', 'r') as f:
+              files = f.read()
+
+          with open('pr_diff.txt', 'r') as f:
+              diff = f.read()
+
+          # Truncate if too large (Claude has token limits)
+          max_diff_size = 50000
+          if len(diff) > max_diff_size:
+              diff = diff[:max_diff_size] + "\n\n... (diff truncated due to size)"
+
+          content = data['messages'][0]['content']
+          content = content.replace('%%%FILES%%%', files)
+          content = content.replace('%%%DIFF%%%', diff)
+          data['messages'][0]['content'] = content
+
+          with open('request.json', 'w') as f:
+              json.dump(data, f)
+          PYTHON
+
+          # Call Claude API
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @request.json)
+
+          # Extract the review text
+          echo "$RESPONSE" > response.json
+
+          REVIEW=$(python3 <<'PYTHON'
+          import json
+          with open('response.json', 'r') as f:
+              data = json.load(f)
+
+          if 'content' in data and len(data['content']) > 0:
+              print(data['content'][0]['text'])
+          else:
+              print("Error getting review from Claude")
+              print(json.dumps(data, indent=2))
+          PYTHON
+          )
+
+          # Save review to file for next step
+          echo "$REVIEW" > review.txt
+
+          echo "Review generated successfully"
+
+      - name: Post review comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('review.txt', 'utf8');
+
+            const body = `## Claude AI Code Review\n\n${review}\n\n---\n*Reviewed by Claude Sonnet 4.5*`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
