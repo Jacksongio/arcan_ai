@@ -5,6 +5,9 @@
 
 set -e
 
+# Change to repository root (script runs from ci_scripts directory)
+cd "$(dirname "$0")/.."
+
 echo "=== Pre-xcodebuild Diagnostics ==="
 
 echo "Working directory:"
