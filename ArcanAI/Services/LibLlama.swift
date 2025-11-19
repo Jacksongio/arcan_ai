@@ -29,6 +29,7 @@ actor LlamaContext {
     private var batch: llama_batch
     private var tokens_list: [llama_token]
     var is_done: Bool = false
+    var should_stop: Bool = false  // Flag to stop generation immediately
 
     /// This variable is used to store temporarily invalid cchars
     private var temporary_invalid_cchars: [CChar]
@@ -117,8 +118,16 @@ actor LlamaContext {
     func completion_init(text: String) {
         print("attempting to complete \"\(text)\"")
 
+        // Clear KV cache and reset state for new completion
+        tokens_list.removeAll()
+        temporary_invalid_cchars.removeAll()
+        llama_memory_clear(llama_get_memory(context), true)
+        is_done = false
+        should_stop = false  // Reset stop flag for new generation
+        n_cur = 0
+        n_decode = 0
+
         tokens_list = tokenize(text: text, add_bos: true)
-        temporary_invalid_cchars = []
 
         let n_ctx = llama_n_ctx(context)
         let n_kv_req = tokens_list.count + (Int(n_len) - tokens_list.count)
@@ -149,6 +158,15 @@ actor LlamaContext {
     }
 
     func completion_loop() -> String {
+        // Check if we should stop immediately
+        if should_stop {
+            print("\n[Stopped by user]")
+            is_done = true
+            let new_token_str = String(cString: temporary_invalid_cchars + [0])
+            temporary_invalid_cchars.removeAll()
+            return new_token_str
+        }
+
         var new_token_id: llama_token = 0
 
         new_token_id = llama_sampler_sample(sampling, context, batch.n_tokens - 1)
@@ -287,6 +305,11 @@ actor LlamaContext {
         result += String("| \(model_desc) | \(model_size) | \(model_n_params) | \(backend) | tg \(tg) | \(tg_avg_str) ± \(tg_std_str) |\n")
 
         return result;
+    }
+
+    func stop() {
+        should_stop = true
+        is_done = true
     }
 
     func clear() {

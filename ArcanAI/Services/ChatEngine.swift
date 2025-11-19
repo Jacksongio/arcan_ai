@@ -2,10 +2,7 @@
 //  ChatEngine.swift
 //  ArcanAI
 //
-//  Simple local LLM inference using llama.cpp
-//
-//  NOTE: This uses a simplified approach with text generation
-//  Real llama.cpp requires building the C library
+//  Local LLM inference using llama.cpp
 //
 
 import Foundation
@@ -19,6 +16,7 @@ class ChatEngine: ObservableObject {
 
     private let modelManager = ModelManager.shared
     private var modelPath: URL?
+    private var llamaContext: LlamaContext?
 
     init() {}
 
@@ -41,134 +39,267 @@ class ChatEngine: ObservableObject {
             throw ChatEngineError.loadFailed("GGUF file not found at \(ggufFile.path)")
         }
 
-        modelPath = ggufFile
-        currentModel = model
-        isModelLoaded = true
-        isLoading = false
+        do {
+            // Initialize llama.cpp context
+            print("Loading model from \(ggufFile.path)...")
+            llamaContext = try await LlamaContext.create_context(path: ggufFile.path)
 
-        print("✅ Model \(model.name) loaded from \(ggufFile.path)")
+            modelPath = ggufFile
+            currentModel = model
+            isModelLoaded = true
+
+            print("✅ Model \(model.name) loaded successfully")
+
+            if let ctx = llamaContext {
+                let info = await ctx.model_info()
+                print("Model info: \(info)")
+            }
+        } catch {
+            isLoading = false
+            throw ChatEngineError.loadFailed("Failed to initialize llama.cpp: \(error.localizedDescription)")
+        }
+
+        isLoading = false
     }
 
     // Send a message and get streaming response
     func sendMessage(_ text: String, conversationHistory: [Message]) async throws -> AsyncStream<String> {
-        guard isModelLoaded, let modelPath = modelPath else {
+        guard isModelLoaded, let llamaContext = llamaContext else {
             throw ChatEngineError.modelNotLoaded
         }
 
-        // Build conversation context
-        var prompt = buildPrompt(userMessage: text, history: conversationHistory)
+        // Build conversation prompt with chat template
+        let prompt = buildPrompt(userMessage: text, history: conversationHistory)
 
         // Create async stream for token streaming
         return AsyncStream { continuation in
             Task {
-                // Use local text generation
-                let response = await self.generateResponse(prompt: prompt, modelPath: modelPath)
+                do {
+                    // Initialize completion with the prompt
+                    await llamaContext.completion_init(text: prompt)
 
-                // Stream the response word by word
-                let words = response.split(separator: " ")
-                for word in words {
-                    continuation.yield(String(word) + " ")
-                    try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 second per word
+                    var buffer = "" // Buffer to handle multi-token special sequences
+
+                    // Stream tokens as they're generated
+                    while await !llamaContext.is_done {
+                        // Check if task was cancelled (stop button pressed)
+                        if Task.isCancelled {
+                            await llamaContext.stop()
+                            break
+                        }
+
+                        let token = await llamaContext.completion_loop()
+                        if !token.isEmpty {
+                            buffer += token
+
+                            // Continuously filter the buffer
+                            buffer = self.filterSpecialTokens(buffer)
+
+                            // Yield if buffer has content and doesn't look like partial special token
+                            if !buffer.isEmpty && !self.mightBePartialSpecialToken(buffer) {
+                                // For smoother streaming, yield in chunks at word boundaries
+                                if buffer.contains(" ") && buffer.count > 15 {
+                                    if let lastSpace = buffer.lastIndex(of: " ") {
+                                        let toYield = String(buffer[..<buffer.index(after: lastSpace)])
+                                        continuation.yield(toYield)
+                                        buffer = String(buffer[buffer.index(after: lastSpace)...])
+                                    }
+                                } else if buffer.count > 50 {
+                                    // Buffer is getting large, yield it
+                                    continuation.yield(buffer)
+                                    buffer = ""
+                                }
+                            }
+                        }
+                    }
+
+                    // Yield any remaining buffer after final filtering
+                    if !buffer.isEmpty {
+                        buffer = self.filterSpecialTokens(buffer)
+                        if !buffer.isEmpty {
+                            continuation.yield(buffer)
+                        }
+                    }
+
+                    continuation.finish()
+                } catch {
+                    print("Error during inference: \(error)")
+                    continuation.finish()
                 }
-
-                continuation.finish()
             }
         }
     }
 
-    // Generate response using simple text generation
-    private func generateResponse(prompt: String, modelPath: URL) async -> String {
-        // Since we can't call llama.cpp C code directly without building it,
-        // we'll use intelligent mock responses based on the prompt
-
-        let lowercasePrompt = prompt.lowercased()
-
-        // Greetings
-        if lowercasePrompt.contains("hello") || lowercasePrompt.contains("hi ") || lowercasePrompt.contains("hey") {
-            return "Hello! I'm ArcanAI, your private AI assistant running completely offline on your device. How can I help you today?"
+    // Apply chat template based on model type
+    private func applyChatTemplate(messages: [(role: String, content: String)]) -> String {
+        guard let model = currentModel else {
+            return messages.last?.content ?? ""
         }
 
-        // Status questions
-        if lowercasePrompt.contains("how are you") || lowercasePrompt.contains("how're you") {
-            return "I'm functioning well, thank you for asking! I'm running locally on your iPhone using the \(currentModel?.name ?? "downloaded") model. What would you like to talk about?"
+        // Different models use different chat templates
+        if model.id.contains("Llama") || model.id.contains("llama") {
+            // Llama 3.1 format
+            var prompt = "<|begin_of_text|>"
+            for msg in messages {
+                if msg.role == "system" {
+                    prompt += "<|start_header_id|>system<|end_header_id|>\n\n\(msg.content)<|eot_id|>"
+                } else if msg.role == "user" {
+                    prompt += "<|start_header_id|>user<|end_header_id|>\n\n\(msg.content)<|eot_id|>"
+                } else if msg.role == "assistant" {
+                    prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n\(msg.content)<|eot_id|>"
+                }
+            }
+            prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            return prompt
+        } else if model.id.contains("Mistral") || model.id.contains("mistral") {
+            // Mistral format
+            var prompt = ""
+            for msg in messages {
+                if msg.role == "user" {
+                    prompt += "[INST] \(msg.content) [/INST]"
+                } else if msg.role == "assistant" {
+                    prompt += "\(msg.content)</s>"
+                }
+            }
+            return prompt
+        } else if model.id.contains("Phi") || model.id.contains("phi") {
+            // Phi-3 format
+            var prompt = ""
+            for msg in messages {
+                if msg.role == "system" {
+                    prompt += "<|system|>\n\(msg.content)<|end|>\n"
+                } else if msg.role == "user" {
+                    prompt += "<|user|>\n\(msg.content)<|end|>\n"
+                } else if msg.role == "assistant" {
+                    prompt += "<|assistant|>\n\(msg.content)<|end|>\n"
+                }
+            }
+            prompt += "<|assistant|>\n"
+            return prompt
+        } else if model.id.contains("gemma") || model.id.contains("Gemma") {
+            // Gemma format
+            var prompt = "<bos>"
+            for msg in messages {
+                if msg.role == "user" {
+                    prompt += "<start_of_turn>user\n\(msg.content)<end_of_turn>\n"
+                } else if msg.role == "assistant" {
+                    prompt += "<start_of_turn>model\n\(msg.content)<end_of_turn>\n"
+                }
+            }
+            prompt += "<start_of_turn>model\n"
+            return prompt
+        } else {
+            // Generic format
+            var prompt = ""
+            for msg in messages {
+                if msg.role == "user" {
+                    prompt += "User: \(msg.content)\n"
+                } else if msg.role == "assistant" {
+                    prompt += "Assistant: \(msg.content)\n"
+                }
+            }
+            prompt += "Assistant: "
+            return prompt
         }
+    }
 
-        // Capability questions
-        if (lowercasePrompt.contains("what") && lowercasePrompt.contains("do")) || lowercasePrompt.contains("capabilities") {
-            return "I'm an AI assistant running entirely on your device. I can help answer questions, have conversations, provide information, and assist with various tasks - all without requiring internet access!"
-        }
+    // Check if text might be a partial special token (to buffer it)
+    private func mightBePartialSpecialToken(_ text: String) -> Bool {
+        let specialTokenPrefixes = [
+            "<", "</", "<|", "<e", "<s", "<b", "[", "[I", "[/",
+            "<start", "<end"
+        ]
 
-        // History/Who questions (like "Who was...")
-        if lowercasePrompt.contains("who was") || lowercasePrompt.contains("who is") {
-            if lowercasePrompt.contains("roman") && lowercasePrompt.contains("emperor") {
-                return "Augustus (born Gaius Octavius) was the first Roman emperor, ruling from 27 BCE to 14 CE. He was Julius Caesar's adopted heir and transformed Rome from a republic into an empire after winning the civil war against Mark Antony and Cleopatra."
-            } else if lowercasePrompt.contains("president") {
-                return "George Washington was the first President of the United States, serving from 1789 to 1797. He's often called the 'Father of His Country' for his leadership during the American Revolution and his role in establishing the new nation."
-            } else {
-                return "That's an interesting historical question! I'm running as ArcanAI with the \(currentModel?.name ?? "model"). While I can provide some general knowledge, for the most accurate historical information, you might want to verify specific details from reliable sources."
+        for prefix in specialTokenPrefixes {
+            if text.hasSuffix(prefix) || prefix.hasPrefix(text) {
+                return true
             }
         }
 
-        // What questions (like "What is...")
-        if lowercasePrompt.contains("what is") || lowercasePrompt.contains("what's") {
-            if lowercasePrompt.contains("capital") {
-                return "I'd be happy to help with geography! Could you specify which country's capital you're asking about? For example, Paris is the capital of France, London is the capital of the UK, and Washington D.C. is the capital of the United States."
-            } else {
-                return "That's a great question! I'm ArcanAI running on your device with \(currentModel?.name ?? "a language model"). I can help explain concepts and provide information. What specifically would you like to know more about?"
-            }
+        return false
+    }
+
+    // Filter out special tokens from model output
+    private func filterSpecialTokens(_ text: String) -> String {
+        var filtered = text
+
+        // List of special tokens to remove (these vary by model)
+        let specialTokens = [
+            // Common end tokens
+            "<|end|>",
+            "<|eot_id|>",
+            "<end_of_turn>",
+            "</end_of_turn>",
+            "</s>",
+            "<eos>",
+
+            // Role tokens
+            "<|assistant|>",
+            "<|user|>",
+            "<|system|>",
+
+            // Start tokens (these should NEVER appear in output)
+            "<start_of_turn>",
+            "</start_of_turn>",
+            "<start_of_turn>model",
+            "<start_of_turn>user",
+            "<start_of_turn>model\n",
+            "<start_of_turn>user\n",
+
+            // Other special tokens
+            "<bos>",
+            "[INST]",
+            "[/INST]",
+            "<|begin_of_text|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>"
+        ]
+
+        for token in specialTokens {
+            filtered = filtered.replacingOccurrences(of: token, with: "")
         }
 
-        // Coding/Programming
-        if lowercasePrompt.contains("code") || lowercasePrompt.contains("program") || lowercasePrompt.contains("function") || lowercasePrompt.contains("python") || lowercasePrompt.contains("javascript") || lowercasePrompt.contains("swift") {
-            return "I can help with coding! I'm running the \(currentModel?.name ?? "model") which is great for programming tasks. What language or problem are you working on? I can help with syntax, debugging, algorithms, or explaining concepts."
-        }
+        // Also use regex to catch variations
+        filtered = filtered.replacingOccurrences(of: "</?start_of_turn[^>]*>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "</?end_of_turn[^>]*>", with: "", options: .regularExpression)
 
-        // Writing help
-        if lowercasePrompt.contains("write") || lowercasePrompt.contains("essay") || lowercasePrompt.contains("story") {
-            return "I'd be happy to help you write something! Whether it's code, content, essays, or creative writing, I can assist. What would you like me to help write? Please give me some details about the topic or style you're looking for."
-        }
-
-        // Explanations
-        if lowercasePrompt.contains("explain") || lowercasePrompt.contains("how does") || lowercasePrompt.contains("why does") {
-            return "I'll do my best to explain that for you! I'm running locally on your device using \(currentModel?.name ?? "a language model"), which allows me to generate responses without internet connectivity. What specifically would you like me to explain?"
-        }
-
-        // Math questions
-        if lowercasePrompt.contains("calculate") || lowercasePrompt.contains("math") || lowercasePrompt.contains("solve") {
-            return "I can help with math problems! I'm running on your device and can assist with calculations, equations, and mathematical concepts. What problem are you working on?"
-        }
-
-        // Help/Support
-        if lowercasePrompt.contains("help") {
-            return "I'm here to help! I'm ArcanAI, running completely offline on your device using \(currentModel?.name ?? "a local model"). I can assist with questions, explanations, coding, writing, and general conversation. What do you need help with?"
-        }
-
-        // Default: Be helpful rather than showing the technical message
-        return "That's an interesting question! I'm ArcanAI, running on your device with \(currentModel?.name ?? "a language model"). While I'm currently operating with simulated responses (until llama.cpp is fully integrated), I can still try to help. Could you rephrase your question or ask something else? I'm best with greetings, explanations, coding help, and general conversation!"
+        return filtered
     }
 
     // Build prompt from conversation history
     private func buildPrompt(userMessage: String, history: [Message]) -> String {
-        var prompt = ""
+        var messages: [(role: String, content: String)] = []
 
-        // Add recent conversation history (last 5 messages)
+        // Add system message with markdown instructions
+        messages.append((role: "system", content: "You are a helpful AI assistant running on-device. Format your responses using markdown for better readability. Use **bold** for emphasis, `code` for inline code, ```language for code blocks, bullet points with -, and proper headings with #."))
+
+        // Add recent conversation history (last 10 messages, excluding streaming ones)
         let recentHistory = history.suffix(10).filter { !$0.isStreaming }
         for message in recentHistory {
             if message.role == .user {
-                prompt += "User: \(message.content)\n"
+                messages.append((role: "user", content: message.content))
             } else if message.role == .assistant {
-                prompt += "Assistant: \(message.content)\n"
+                messages.append((role: "assistant", content: message.content))
             }
         }
 
         // Add current message
-        prompt += "User: \(userMessage)\nAssistant:"
+        messages.append((role: "user", content: userMessage))
 
-        return prompt
+        // Apply the appropriate chat template
+        return applyChatTemplate(messages: messages)
+    }
+
+    // Stop current generation
+    func stopGeneration() async {
+        if let llamaContext = llamaContext {
+            await llamaContext.stop()
+        }
     }
 
     // Unload the current model
     func unloadModel() {
+        llamaContext = nil
         currentModel = nil
         isModelLoaded = false
         modelPath = nil

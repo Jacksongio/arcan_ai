@@ -14,9 +14,14 @@ ArcanAI lets you run open-source Ollama models **entirely on your iPhone or iPad
 ## Features
 - Zero sign-in — no email, no tracking, no telemetry
 - 100% offline after model download
-- Pre-download model selector — choose Phi-3, Mistral, Llama 3.1 (Q4/Q5)
-- On-device inference via Core ML + Neural Engine (20–35 tokens/sec on iPhone 15 Pro)
-- ChatGPT-style UI with history, system prompts, streaming responses
+- Pre-download model selector — choose Phi-3, Mistral, Llama 3.1, Gemma 2 (Q4/Q5)
+- On-device inference via llama.cpp with Metal acceleration (20–35 tokens/sec on iPhone 15 Pro)
+- ChatGPT-style UI with streaming responses and conversation history
+- Markdown rendering — code blocks, bold, lists, and formatting in responses
+- Smart token filtering — clean output without model artifacts
+- Auto-scroll — chat follows responses as they generate
+- Stop control — halt generation instantly at any time
+- Enter to send — natural keyboard messaging experience
 
 ## Models (Pre-converted `.mlpackage`)
 | Model | Size | Params | Use Case |
@@ -40,22 +45,39 @@ ArcanAI lets you run open-source Ollama models **entirely on your iPhone or iPad
 
 ## Recent Updates
 
-### Latest Features
-- **Landing Page & Model Selector** — Added intuitive UI for browsing and selecting models before download
-- **Chat Interface** — Implemented ChatGPT-style conversation view with streaming responses and message history
-- **Core ML Integration** — Built complete inference pipeline using llama.cpp with Core ML acceleration
-- **Model Management** — Added download, caching, and switching capabilities for multiple models
-- **Conversation System** — Implemented message persistence and conversation history management
+### 🎉 Today's Major Update (2025-11-19)
 
-### Developer Improvements
-- **CI/CD Integration** — Added GitHub Actions workflow for automated Claude Code PR reviews
-- **Project Structure** — Organized codebase with clear separation: Views, Models, Services
-- **Requirements Analysis** — Documented comprehensive technical requirements and architecture decisions
-- **llama.cpp Submodule** — Integrated official llama.cpp as git submodule for native inference
+**Core Functionality Completed**
+- ✅ **Real AI Inference** — Completed full llama.cpp integration with actual on-device LLM generation (no more mock responses!)
+- ✅ **Multi-Turn Conversations** — Fixed context management for proper conversation history
+- ✅ **Model-Specific Templates** — Added proper chat templates for Llama 3.1, Mistral 7B, Phi-3, and Gemma 2
+- ✅ **Smart Token Filtering** — Intelligent buffering removes special tokens (`<start_of_turn>`, `<end_of_turn>`, etc.) for clean output
+- ✅ **Thread-Safe Architecture** — Actor-based LlamaContext for safe concurrent access
+
+**User Experience Enhancements**
+- ✅ **Markdown Rendering** — Rich text formatting with code blocks, bold, italics, lists, and headers
+- ✅ **Auto-Scroll** — Chat automatically follows AI responses as they stream
+- ✅ **Loading States** — "Generating..." indicator inside chat bubble before first token
+- ✅ **Stop Button** — Immediately halt generation mid-response (with proper cleanup)
+- ✅ **Enter to Send** — Press Enter to submit messages naturally
+- ✅ **Text Selection** — Copy and paste AI responses
+
+**Technical Improvements**
+- ✅ **Proper Task Cancellation** — Stop button actually stops llama.cpp inference (prevents crashes)
+- ✅ **State Management** — Clean KV cache clearing between messages
+- ✅ **Streaming Pipeline** — Token-by-token generation with intelligent buffering
+- ✅ **Regex Filtering** — Catches token variations and edge cases
+
+### Previous Features
+- **Landing Page & Model Selector** — Intuitive UI for browsing and selecting models
+- **Chat Interface** — ChatGPT-style conversation view with message history
+- **Model Management** — Download, caching, and switching capabilities
+- **CI/CD Integration** — GitHub Actions workflow for automated reviews
+- **llama.cpp Submodule** — Official llama.cpp integration via git submodule
 
 ### Technical Stack
 - SwiftUI for modern, declarative UI
-- Core ML + Neural Engine for on-device acceleration
-- llama.cpp for LLM inference
-- Async/await for streaming token generation
+- llama.cpp with Metal acceleration for GPU inference
+- Swift async/await for streaming token generation
+- Actor pattern for thread-safe context management
 

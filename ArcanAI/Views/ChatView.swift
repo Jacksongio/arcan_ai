@@ -16,6 +16,7 @@ struct ChatView: View {
     @State private var isGenerating = false
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
+    @State private var generationTask: Task<Void, Never>?
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -56,11 +57,12 @@ struct ChatView: View {
                         .padding(16)
                     }
                     .onChange(of: conversation.messages.count) { _, _ in
-                        if let lastMessage = conversation.messages.last {
-                            withAnimation {
-                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
-                        }
+                        // Scroll when new messages are added
+                        scrollToBottom(proxy: proxy)
+                    }
+                    .onChange(of: conversation.messages.last?.content) { _, _ in
+                        // Scroll during streaming (content updates)
+                        scrollToBottom(proxy: proxy, animated: false)
                     }
                 }
 
@@ -148,7 +150,7 @@ struct ChatView: View {
     // MARK: - Input View
     private var messageInputView: some View {
         HStack(spacing: 12) {
-            // Text field
+            // Text field with Enter key support
             TextField("Message", text: $messageText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .padding(12)
@@ -157,9 +159,21 @@ struct ChatView: View {
                 .foregroundColor(.white)
                 .lineLimit(1...5)
                 .disabled(isGenerating || !chatEngine.isModelLoaded)
+                .onSubmit {
+                    if !isGenerating && !messageText.trimmingCharacters(in: .whitespaces).isEmpty {
+                        sendMessage()
+                    }
+                }
+                .submitLabel(.send)
 
-            // Send button
-            Button(action: sendMessage) {
+            // Send/Stop button
+            Button(action: {
+                if isGenerating {
+                    stopGeneration()
+                } else {
+                    sendMessage()
+                }
+            }) {
                 Image(systemName: isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
                     .font(.system(size: 32))
                     .foregroundColor(messageText.isEmpty && !isGenerating ? .gray : .blue)
@@ -172,6 +186,18 @@ struct ChatView: View {
     }
 
     // MARK: - Functions
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+        if let lastMessage = conversation.messages.last {
+            if animated {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            }
+        }
+    }
+
     private func loadModel() async {
         do {
             try await chatEngine.loadModel(model)
@@ -196,7 +222,7 @@ struct ChatView: View {
         var assistantMessage = Message(role: .assistant, content: "", isStreaming: true)
         conversation.addMessage(assistantMessage)
 
-        Task {
+        generationTask = Task {
             do {
                 let stream = try await chatEngine.sendMessage(
                     userMessageText,
@@ -206,6 +232,11 @@ struct ChatView: View {
                 var fullResponse = ""
 
                 for await token in stream {
+                    // Check if task was cancelled
+                    if Task.isCancelled {
+                        break
+                    }
+
                     fullResponse += token
 
                     // Update the last message (assistant's response)
@@ -220,17 +251,37 @@ struct ChatView: View {
                 }
 
                 isGenerating = false
+                generationTask = nil
 
             } catch {
                 errorMessage = error.localizedDescription
                 showErrorAlert = true
                 isGenerating = false
+                generationTask = nil
 
                 // Remove failed message
                 if conversation.messages.last?.isStreaming == true {
                     conversation.messages.removeLast()
                 }
             }
+        }
+    }
+
+    private func stopGeneration() {
+        // Cancel the Swift task
+        generationTask?.cancel()
+        generationTask = nil
+        isGenerating = false
+
+        // Stop the llama.cpp inference immediately
+        Task {
+            await chatEngine.stopGeneration()
+        }
+
+        // Mark the last message as complete (not streaming)
+        if let lastIndex = conversation.messages.indices.last,
+           conversation.messages[lastIndex].isStreaming {
+            conversation.messages[lastIndex].isStreaming = false
         }
     }
 }
@@ -246,36 +297,55 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .font(.system(size: 16))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(message.role == .user ?
-                                  LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.purple]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                  ) :
-                                  LinearGradient(
+                // Use AttributedString for markdown rendering
+                if message.role == .assistant {
+                    // Show loading state if streaming and no content yet
+                    if message.isStreaming && message.content.isEmpty {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white.opacity(0.7)))
+                                .scaleEffect(0.8)
+
+                            Text("Generating...")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(LinearGradient(
                                     gradient: Gradient(colors: [Color.white.opacity(0.15), Color.white.opacity(0.15)]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
-                                  )
+                                ))
+                        )
+                    } else {
+                        MarkdownText(message.content)
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(LinearGradient(
+                                        gradient: Gradient(colors: [Color.white.opacity(0.15), Color.white.opacity(0.15)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ))
                             )
-                    )
-
-                if message.isStreaming {
-                    HStack(spacing: 4) {
-                        Text("Generating")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.5))
-
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white.opacity(0.5)))
-                            .scaleEffect(0.6)
                     }
+                } else {
+                    Text(message.content)
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(LinearGradient(
+                                    gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ))
+                        )
                 }
             }
             .frame(maxWidth: 280, alignment: message.role == .user ? .trailing : .leading)
@@ -283,6 +353,26 @@ struct MessageBubble: View {
             if message.role == .assistant {
                 Spacer()
             }
+        }
+    }
+}
+
+// MARK: - Markdown Text View
+struct MarkdownText: View {
+    let content: String
+
+    init(_ content: String) {
+        self.content = content
+    }
+
+    var body: some View {
+        if let attributedString = try? AttributedString(markdown: content, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(attributedString)
+                .textSelection(.enabled)
+        } else {
+            // Fallback if markdown parsing fails
+            Text(content)
+                .textSelection(.enabled)
         }
     }
 }
