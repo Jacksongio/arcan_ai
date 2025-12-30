@@ -194,12 +194,51 @@ class ModelManager: ObservableObject {
             let filename = model.modelLib  // e.g., "gemma-2-2b-it-Q4_K_M.gguf"
             let destinationURL = modelPath.appendingPathComponent(filename)
 
-            // Check if model exists in app bundle
-            if let bundledModelURL = Bundle.main.url(forResource: filename.replacingOccurrences(of: ".gguf", with: ""), withExtension: "gguf") {
-                // Copy from bundle to Application Support
+            // Find model in bundle using multiple fallback methods
+            // This is more reliable than Bundle.main.url() for large files in Release builds
+            var bundledModelURL: URL? = nil
+
+            // Method 1: Direct path from bundle URL (most reliable for large files)
+            let directPath = Bundle.main.bundleURL.appendingPathComponent(filename)
+            if fileManager.fileExists(atPath: directPath.path) {
+                bundledModelURL = directPath
+                print("📥 Found model using direct path")
+            }
+
+            // Method 2: Resource path (fallback for different bundle structures)
+            if bundledModelURL == nil, let resourcePath = Bundle.main.resourcePath {
+                let resourceURL = URL(fileURLWithPath: resourcePath).appendingPathComponent(filename)
+                if fileManager.fileExists(atPath: resourceURL.path) {
+                    bundledModelURL = resourceURL
+                    print("📥 Found model using resource path")
+                }
+            }
+
+            // Method 3: Original Bundle.main.url() method (final fallback)
+            if bundledModelURL == nil {
+                bundledModelURL = Bundle.main.url(forResource: filename.replacingOccurrences(of: ".gguf", with: ""), withExtension: "gguf")
+                if bundledModelURL != nil {
+                    print("📥 Found model using Bundle.main.url()")
+                }
+            }
+
+            // Check if model was found and copy it
+            if let bundledModelURL = bundledModelURL {
                 print("📥 Copying from bundle: \(bundledModelURL.path)")
+
+                // Copy file to Application Support
                 try fileManager.copyItem(at: bundledModelURL, to: destinationURL)
-                print("✅ Model copied to: \(destinationURL.path)")
+
+                // Verify the copied file is valid (not corrupted)
+                let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
+                if let fileSize = attributes[.size] as? Int64 {
+                    print("✅ Model copied successfully (\(fileSize) bytes)")
+
+                    // Sanity check: file should be > 1GB for the real model
+                    if fileSize < 1_000_000_000 {
+                        print("⚠️ Warning: Copied file seems too small (\(fileSize) bytes)")
+                    }
+                }
             } else {
                 print("⚠️ Model not found in bundle, creating placeholder")
                 // Fallback: create placeholder if bundle file missing
