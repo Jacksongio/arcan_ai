@@ -7,10 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		835746DC2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf in Resources */ = {isa = PBXBuildFile; fileRef = 835746DB2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf */; };
+		835746DE2F04154A00454292 /* arcanai.png in Resources */ = {isa = PBXBuildFile; fileRef = 835746DD2F04154A00454292 /* arcanai.png */; };
 		AA0001 /* ArcanAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000 /* ArcanAIApp.swift */; };
 		AA0003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0002 /* ContentView.swift */; };
 		AA0005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0004 /* Assets.xcassets */; };
-		AA0025 /* ModelSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0026 /* ModelSelectorView.swift */; };
 		AA0027 /* MLCModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0028 /* MLCModel.swift */; };
 		AA0029 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA002A /* ModelManager.swift */; };
 		AA0032 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0033 /* Message.swift */; };
@@ -37,13 +38,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		835746DB2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "gemma-2-2b-it-Q4_K_M.gguf"; sourceTree = "<group>"; };
+		835746DD2F04154A00454292 /* arcanai.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = arcanai.png; sourceTree = "<group>"; };
 		83D12A102ECE49680098A1F7 /* aracan_logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = aracan_logo.png; sourceTree = "<group>"; };
 		AA0000 /* ArcanAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcanAIApp.swift; sourceTree = "<group>"; };
 		AA0002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA0004 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA000D /* ArcanAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArcanAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		AA0026 /* ModelSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelSelectorView.swift; sourceTree = "<group>"; };
 		AA0028 /* MLCModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLCModel.swift; sourceTree = "<group>"; };
 		AA002A /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		AA0033 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
@@ -51,7 +53,7 @@
 		AA0037 /* ChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngine.swift; sourceTree = "<group>"; };
 		AA0039 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		AA0041 /* LibLlama.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibLlama.swift; sourceTree = "<group>"; };
-		AA0043 /* llama.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = llama.xcframework; path = "Frameworks/llama.xcframework"; sourceTree = "<group>"; };
+		AA0043 /* llama.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = llama.xcframework; path = Frameworks/llama.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,7 +94,9 @@
 		AA0014 = {
 			isa = PBXGroup;
 			children = (
+				835746DB2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf */,
 				83D12A102ECE49680098A1F7 /* aracan_logo.png */,
+				835746DD2F04154A00454292 /* arcanai.png */,
 				AA000F /* ArcanAI */,
 				AA000E /* Products */,
 				AA0046 /* Frameworks */,
@@ -103,7 +107,6 @@
 			isa = PBXGroup;
 			children = (
 				AA0002 /* ContentView.swift */,
-				AA0026 /* ModelSelectorView.swift */,
 				AA0039 /* ChatView.swift */,
 			);
 			path = Views;
@@ -210,7 +213,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				835746DE2F04154A00454292 /* arcanai.png in Resources */,
 				AA0005 /* Assets.xcassets in Resources */,
+				835746DC2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -223,7 +228,6 @@
 			files = (
 				AA0003 /* ContentView.swift in Sources */,
 				AA0001 /* ArcanAIApp.swift in Sources */,
-				AA0025 /* ModelSelectorView.swift in Sources */,
 				AA0027 /* MLCModel.swift in Sources */,
 				AA0029 /* ModelManager.swift in Sources */,
 				AA0032 /* Message.swift in Sources */,

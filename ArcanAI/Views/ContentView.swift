@@ -9,9 +9,10 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var modelManager = ModelManager.shared
-    @State private var showModelSelector = false
     @State private var navigateToChat = false
-    @State private var selectedModelForChat: MLCModel?
+    @State private var isPreparingModel = false
+
+    private let defaultModel = MLCModel.defaultModel
 
     var body: some View {
         NavigationStack {
@@ -62,6 +63,16 @@ struct ContentView: View {
             VStack(spacing: 24) {
                 Spacer()
 
+                // Logo
+                if let uiImage = UIImage(named: "arcanai.png") {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 120, height: 120)
+                        .shadow(color: Color.blue.opacity(0.5), radius: 20, x: 0, y: 0)
+                        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                }
+
                 // Main title
                 Text("Welcome to ArcanAI!")
                     .font(.system(size: 42, weight: .bold, design: .rounded))
@@ -77,49 +88,40 @@ struct ContentView: View {
                     .padding(.horizontal, 40)
                     .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 2)
 
-                // Downloaded models list or select button
-                if !modelManager.downloadedModels.isEmpty {
-                    VStack(spacing: 12) {
-                        Text("Your Models")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white.opacity(0.6))
-
-                        ForEach(MLCModel.availableModels.filter { modelManager.isModelDownloaded($0.id) }) { model in
-                            Button(action: {
-                                selectedModelForChat = model
-                                navigateToChat = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "brain.head.profile")
-                                        .font(.system(size: 16))
-
-                                    Text(model.name)
-                                        .font(.system(size: 16, weight: .medium, design: .rounded))
-
-                                    Spacer()
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 14))
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 14)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(12)
-                            }
-                        }
+                // Model info
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 16))
+                        Text(defaultModel.name)
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
                     }
-                    .padding(.horizontal, 40)
-                }
+                    .foregroundColor(.white.opacity(0.9))
 
-                // Select Model Button
+                    Text("\(defaultModel.params) parameters • \(defaultModel.size)")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .padding(.top, 20)
+
+                // Start Chat Button
                 Button(action: {
-                    showModelSelector = true
+                    Task {
+                        isPreparingModel = true
+                        await modelManager.ensureModelAvailable(defaultModel)
+                        isPreparingModel = false
+                        navigateToChat = true
+                    }
                 }) {
                     HStack(spacing: 12) {
-                        Image(systemName: modelManager.downloadedModels.isEmpty ? "cpu.fill" : "plus.circle.fill")
-                            .font(.system(size: 20))
-                        Text(modelManager.downloadedModels.isEmpty ? "Select Your Model" : "Download More Models")
+                        if isPreparingModel {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 20))
+                        }
+                        Text(isPreparingModel ? "Preparing Model..." : "Start Chat")
                             .font(.system(size: 18, weight: .semibold, design: .rounded))
                     }
                     .foregroundColor(.white)
@@ -138,25 +140,17 @@ struct ContentView: View {
                     .cornerRadius(16)
                     .shadow(color: Color.blue.opacity(0.4), radius: 10, x: 0, y: 5)
                 }
+                .disabled(isPreparingModel)
                 .padding(.top, 20)
 
                 Spacer()
             }
             .navigationDestination(isPresented: $navigateToChat) {
-                if let model = selectedModelForChat {
-                    ChatView(model: model)
-                        .navigationBarBackButtonHidden(true)
-                }
+                ChatView(model: defaultModel)
+                    .navigationBarBackButtonHidden(true)
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showModelSelector) {
-            ModelSelectorView(onModelDownloaded: { model in
-                selectedModelForChat = model
-                navigateToChat = true
-                showModelSelector = false
-            })
-        }
         }
     }
 }

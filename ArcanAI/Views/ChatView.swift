@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
     @State private var generationTask: Task<Void, Never>?
+    @State private var showDeleteConfirmation = false
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -93,7 +94,7 @@ struct ChatView: View {
             Spacer()
 
             VStack(spacing: 2) {
-                Text(model.name)
+                Text("ArcanAI")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
 
@@ -111,12 +112,22 @@ struct ChatView: View {
             Spacer()
 
             Button(action: {
-                // Clear conversation
-                conversation.messages.removeAll()
+                if showDeleteConfirmation {
+                    // Second click - actually delete
+                    conversation.messages.removeAll()
+                    showDeleteConfirmation = false
+                } else {
+                    // First click - show confirmation
+                    showDeleteConfirmation = true
+                    // Reset confirmation after 3 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        showDeleteConfirmation = false
+                    }
+                }
             }) {
-                Image(systemName: "trash")
+                Image(systemName: showDeleteConfirmation ? "exclamationmark.triangle.fill" : "trash")
                     .font(.system(size: 18))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(showDeleteConfirmation ? .red : .white.opacity(0.7))
             }
         }
         .padding(.horizontal, 20)
@@ -245,8 +256,9 @@ struct ChatView: View {
                     }
                 }
 
-                // Mark streaming as complete
+                // Mark streaming as complete and trim trailing whitespace
                 if let lastIndex = conversation.messages.indices.last {
+                    conversation.messages[lastIndex].content = fullResponse.trimmingCharacters(in: .whitespacesAndNewlines)
                     conversation.messages[lastIndex].isStreaming = false
                 }
 
@@ -289,9 +301,10 @@ struct ChatView: View {
 // MARK: - Message Bubble
 struct MessageBubble: View {
     let message: Message
+    @State private var showCopiedFeedback = false
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 8) {
             if message.role == .user {
                 Spacer()
             }
@@ -350,9 +363,39 @@ struct MessageBubble: View {
             }
             .frame(maxWidth: 280, alignment: message.role == .user ? .trailing : .leading)
 
+            // Copy button (only show for assistant messages that are non-empty and non-streaming)
+            if message.role == .assistant && !message.content.isEmpty && !message.isStreaming {
+                Button(action: {
+                    copyToClipboard(message.content)
+                }) {
+                    Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.5))
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
             if message.role == .assistant {
                 Spacer()
             }
+        }
+    }
+
+    private func copyToClipboard(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
+
+        // Show feedback
+        showCopiedFeedback = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            showCopiedFeedback = false
         }
     }
 }
