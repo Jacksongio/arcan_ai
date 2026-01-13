@@ -280,15 +280,25 @@ class ModelManager: ObservableObject {
 
     /// Validate a .gguf file before import
     func validateGGUFFile(at url: URL) throws {
+        print("🔍 Validating GGUF file at: \(url)")
+        print("🔍 URL path: \(url.path)")
+        print("🔍 URL is file URL: \(url.isFileURL)")
+
         // Check extension
         guard url.pathExtension.lowercased() == "gguf" else {
             throw ModelImportError.invalidFileType
         }
 
         // Check file exists and is readable
-        guard fileManager.fileExists(atPath: url.path) else {
-            throw ModelImportError.copyFailed("File does not exist")
+        // Use path(percentEncoded:) for better iOS 16+ compatibility
+        let filePath = url.path
+        print("🔍 Checking if file exists at path: \(filePath)")
+        guard fileManager.fileExists(atPath: filePath) else {
+            print("❌ File not found at path: \(filePath)")
+            print("❌ URL description: \(url)")
+            throw ModelImportError.copyFailed("File does not exist at path: \(filePath)")
         }
+        print("✅ File exists")
 
         // Check file size
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
