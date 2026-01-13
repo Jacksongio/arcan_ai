@@ -269,26 +269,33 @@ struct ContentView: View {
         case .success(let urls):
             guard let fileURL = urls.first else { return }
 
-            // Start security-scoped resource access
-            let gotAccess = fileURL.startAccessingSecurityScopedResource()
-            guard gotAccess else {
-                importError = "Could not access selected file"
-                showErrorAlert = true
-                return
-            }
-
-            defer { fileURL.stopAccessingSecurityScopedResource() }
-
             isImporting = true
             Task {
+                // Start security-scoped resource access inside the async task
+                let gotAccess = fileURL.startAccessingSecurityScopedResource()
+                guard gotAccess else {
+                    await MainActor.run {
+                        importError = "Could not access selected file"
+                        showErrorAlert = true
+                        isImporting = false
+                    }
+                    return
+                }
+
+                defer { fileURL.stopAccessingSecurityScopedResource() }
+
                 do {
                     let importedModel = try await modelManager.importCustomModel(from: fileURL)
-                    selectedModel = importedModel // Auto-select newly imported model
-                    isImporting = false
+                    await MainActor.run {
+                        selectedModel = importedModel // Auto-select newly imported model
+                        isImporting = false
+                    }
                 } catch {
-                    importError = error.localizedDescription
-                    showErrorAlert = true
-                    isImporting = false
+                    await MainActor.run {
+                        importError = error.localizedDescription
+                        showErrorAlert = true
+                        isImporting = false
+                    }
                 }
             }
 
