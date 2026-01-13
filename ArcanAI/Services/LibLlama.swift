@@ -127,6 +127,13 @@ actor LlamaContext {
         n_cur = 0
         n_decode = 0
 
+        // Reset sampler with new random seed for variety
+        llama_sampler_free(sampling)
+        let sparams = llama_sampler_chain_default_params()
+        sampling = llama_sampler_chain_init(sparams)
+        llama_sampler_chain_add(sampling, llama_sampler_init_temp(0.4))
+        llama_sampler_chain_add(sampling, llama_sampler_init_dist(UInt32.random(in: 0...UInt32.max)))
+
         tokens_list = tokenize(text: text, add_bos: true)
 
         let n_ctx = llama_n_ctx(context)
@@ -316,6 +323,13 @@ actor LlamaContext {
         tokens_list.removeAll()
         temporary_invalid_cchars.removeAll()
         llama_memory_clear(llama_get_memory(context), true)
+
+        // Reset sampler
+        llama_sampler_free(sampling)
+        let sparams = llama_sampler_chain_default_params()
+        sampling = llama_sampler_chain_init(sparams)
+        llama_sampler_chain_add(sampling, llama_sampler_init_temp(0.4))
+        llama_sampler_chain_add(sampling, llama_sampler_init_dist(UInt32.random(in: 0...UInt32.max)))
     }
 
     private func tokenize(text: String, add_bos: Bool) -> [llama_token] {

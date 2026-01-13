@@ -16,10 +16,12 @@ class ModelManager: ObservableObject {
     @Published var isDownloading: [String: Bool] = [:]
     @Published var downloadedModels: Set<String> = []
     @Published var downloadError: [String: String] = [:]
+    @Published var customModels: [MLCModel] = []
 
     private var downloadTasks: [String: URLSessionDownloadTask] = [:]
     private var urlSession: URLSession!
     private let fileManager = FileManager.default
+    private let customModelsFile = "custom_models.json"
 
     private init() {
         // Configure URLSession for large file downloads
@@ -30,6 +32,7 @@ class ModelManager: ObservableObject {
         self.urlSession = URLSession(configuration: config)
 
         checkDownloadedModels()
+        loadCustomModels()
     }
 
     var modelsDirectory: URL {
@@ -174,9 +177,175 @@ class ModelManager: ObservableObject {
         downloadError[modelId]
     }
 
+    // MARK: - Custom Model Management
+
+    /// Load custom models from persistent storage
+    func loadCustomModels() {
+        let fileURL = modelsDirectory.appendingPathComponent(customModelsFile)
+        guard let data = try? Data(contentsOf: fileURL),
+              let models = try? JSONDecoder().decode([MLCModel].self, from: data) else {
+            customModels = []
+            return
+        }
+        customModels = models
+        print("📚 Loaded \(models.count) custom model(s)")
+    }
+
+    /// Save custom models to persistent storage
+    func saveCustomModels() {
+        let fileURL = modelsDirectory.appendingPathComponent(customModelsFile)
+        guard let data = try? JSONEncoder().encode(customModels) else {
+            print("❌ Failed to encode custom models")
+            return
+        }
+        do {
+            try data.write(to: fileURL)
+            print("💾 Saved \(customModels.count) custom model(s)")
+        } catch {
+            print("❌ Failed to save custom models: \(error)")
+        }
+    }
+
+    /// Import a custom model from a file URL
+    func importCustomModel(from sourceURL: URL) async throws -> MLCModel {
+        // Validate the file
+        try validateGGUFFile(at: sourceURL)
+
+        // Parse filename to extract metadata
+        let filename = sourceURL.lastPathComponent
+        print("📥 Importing custom model: \(filename)")
+
+        // Create MLCModel with extracted metadata
+        let customModel = MLCModel.fromCustomFile(filename: filename, fileURL: sourceURL)
+
+        // Create destination directory
+        let modelDir = modelsDirectory.appendingPathComponent(customModel.id)
+        try fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
+
+        // Copy file to destination
+        let destinationURL = modelDir.appendingPathComponent(filename)
+        do {
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            print("✅ Copied model to: \(destinationURL.path)")
+
+            // Verify the copied file is valid
+            let handle = try FileHandle(forReadingFrom: destinationURL)
+            defer { try? handle.close() }
+
+            let magicBytes = handle.readData(ofLength: 4)
+            guard let magic = String(data: magicBytes, encoding: .utf8), magic == "GGUF" else {
+                // Clean up invalid file
+                try? fileManager.removeItem(at: modelDir)
+                throw ModelImportError.invalidGGUFFile
+            }
+            print("✅ Verified copied file is valid GGUF")
+        } catch let error as ModelImportError {
+            // Re-throw our custom errors
+            throw error
+        } catch {
+            // Clean up on failure
+            try? fileManager.removeItem(at: modelDir)
+            throw ModelImportError.copyFailed(error.localizedDescription)
+        }
+
+        // Save metadata
+        let metadataURL = modelDir.appendingPathComponent("model_info.json")
+        let jsonData = try JSONEncoder().encode(customModel)
+        try jsonData.write(to: metadataURL)
+
+        // Add to custom models list and persist
+        customModels.append(customModel)
+        saveCustomModels()
+        downloadedModels.insert(customModel.id)
+
+        print("✅ Successfully imported custom model: \(customModel.name)")
+        return customModel
+    }
+
+    /// Delete a custom model
+    func deleteCustomModel(_ model: MLCModel) throws {
+        guard model.isCustom else {
+            throw ModelImportError.cannotDeleteDefaultModel
+        }
+
+        // Delete from disk
+        try deleteModel(model)
+
+        // Remove from custom models list
+        customModels.removeAll { $0.id == model.id }
+        saveCustomModels()
+
+        print("🗑️ Deleted custom model: \(model.name)")
+    }
+
+    /// Validate a .gguf file before import
+    func validateGGUFFile(at url: URL) throws {
+        // Check extension
+        guard url.pathExtension.lowercased() == "gguf" else {
+            throw ModelImportError.invalidFileType
+        }
+
+        // Check file exists and is readable
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw ModelImportError.copyFailed("File does not exist")
+        }
+
+        // Check file size
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let fileSize = attributes[.size] as? Int64 else {
+            throw ModelImportError.copyFailed("Could not read file size")
+        }
+
+        let minSize: Int64 = 100_000_000  // 100 MB (reduced for smaller models)
+        let maxSize: Int64 = 10_000_000_000  // 10 GB
+
+        if fileSize < minSize {
+            throw ModelImportError.fileTooSmall
+        }
+
+        if fileSize > maxSize {
+            throw ModelImportError.fileTooLarge
+        }
+
+        // Check GGUF magic bytes (first 4 bytes should be "GGUF")
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+
+            let magicBytes = handle.readData(ofLength: 4)
+            guard let magic = String(data: magicBytes, encoding: .utf8), magic == "GGUF" else {
+                throw ModelImportError.invalidGGUFFile
+            }
+            print("✅ Valid GGUF magic bytes detected")
+        } catch {
+            throw ModelImportError.invalidGGUFFile
+        }
+
+        // Check available storage
+        if let volumeURL = url.deletingLastPathComponent() as URL?,
+           let resourceValues = try? volumeURL.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+           let availableCapacity = resourceValues.volumeAvailableCapacity {
+            if Int64(availableCapacity) < fileSize {
+                throw ModelImportError.insufficientStorage
+            }
+        }
+
+        print("✅ Validation passed for: \(url.lastPathComponent)")
+    }
+
     // MARK: - Pre-bundled Model Management
 
     func ensureModelAvailable(_ model: MLCModel) async {
+        // Custom models are already in place after import, skip bundle check
+        if model.isCustom {
+            if isModelDownloaded(model.id) {
+                print("✅ Custom model already available: \(model.name)")
+            } else {
+                print("⚠️ Custom model not found, may need to re-import")
+            }
+            return
+        }
+
         // Check if model is already available in Application Support
         if isModelDownloaded(model.id) {
             print("✅ Model already available: \(model.name)")
@@ -292,6 +461,35 @@ enum ModelDownloadError: Error, LocalizedError {
             return "Invalid download URL"
         case .insufficientStorage:
             return "Insufficient storage space"
+        }
+    }
+}
+
+enum ModelImportError: Error, LocalizedError {
+    case invalidFileType
+    case fileTooLarge
+    case fileTooSmall
+    case insufficientStorage
+    case cannotDeleteDefaultModel
+    case copyFailed(String)
+    case invalidGGUFFile
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidFileType:
+            return "File must be a .gguf model"
+        case .fileTooLarge:
+            return "Model file is too large (max 10 GB)"
+        case .fileTooSmall:
+            return "Model file is too small (min 100 MB)"
+        case .insufficientStorage:
+            return "Insufficient storage space"
+        case .cannotDeleteDefaultModel:
+            return "Cannot delete default model"
+        case .copyFailed(let message):
+            return "Failed to copy file: \(message)"
+        case .invalidGGUFFile:
+            return "Invalid GGUF file format. Please ensure you're uploading a valid .gguf model file."
         }
     }
 }

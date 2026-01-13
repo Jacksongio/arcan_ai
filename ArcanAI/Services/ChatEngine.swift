@@ -136,8 +136,11 @@ class ChatEngine: ObservableObject {
             return messages.last?.content ?? ""
         }
 
+        // Check both model.id and model.name for matching (important for custom models)
+        let modelIdentifier = model.id.lowercased() + " " + model.name.lowercased()
+
         // Different models use different chat templates
-        if model.id.contains("Llama") || model.id.contains("llama") {
+        if modelIdentifier.contains("llama") {
             // Llama 3.1 format
             var prompt = "<|begin_of_text|>"
             for msg in messages {
@@ -151,7 +154,7 @@ class ChatEngine: ObservableObject {
             }
             prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
             return prompt
-        } else if model.id.contains("Mistral") || model.id.contains("mistral") {
+        } else if modelIdentifier.contains("mistral") {
             // Mistral format
             var prompt = ""
             for msg in messages {
@@ -162,7 +165,7 @@ class ChatEngine: ObservableObject {
                 }
             }
             return prompt
-        } else if model.id.contains("Phi") || model.id.contains("phi") {
+        } else if modelIdentifier.contains("phi") {
             // Phi-3 format
             var prompt = ""
             for msg in messages {
@@ -176,7 +179,7 @@ class ChatEngine: ObservableObject {
             }
             prompt += "<|assistant|>\n"
             return prompt
-        } else if model.id.contains("gemma") || model.id.contains("Gemma") {
+        } else if modelIdentifier.contains("gemma") {
             // Gemma format
             var prompt = "<bos>"
             for msg in messages {
@@ -189,16 +192,16 @@ class ChatEngine: ObservableObject {
             prompt += "<start_of_turn>model\n"
             return prompt
         } else {
-            // Generic format
-            var prompt = ""
+            // Generic/fallback format - use Gemma-style as it's widely compatible
+            var prompt = "<bos>"
             for msg in messages {
                 if msg.role == "user" {
-                    prompt += "User: \(msg.content)\n"
+                    prompt += "<start_of_turn>user\n\(msg.content)<end_of_turn>\n"
                 } else if msg.role == "assistant" {
-                    prompt += "Assistant: \(msg.content)\n"
+                    prompt += "<start_of_turn>model\n\(msg.content)<end_of_turn>\n"
                 }
             }
-            prompt += "Assistant: "
+            prompt += "<start_of_turn>model\n"
             return prompt
         }
     }
@@ -263,6 +266,19 @@ class ChatEngine: ObservableObject {
         filtered = filtered.replacingOccurrences(of: "</?start_of_turn[^>]*>", with: "", options: .regularExpression)
         filtered = filtered.replacingOccurrences(of: "</?end_of_turn[^>]*>", with: "", options: .regularExpression)
 
+        // Handle tokenizer splitting tokens with spaces (e.g., "< | e ot _ id | >")
+        filtered = filtered.replacingOccurrences(of: "< \\| e ?ot _ id \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| end \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| begin _ of _ text \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| start _ header _ id \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| end _ header _ id \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| assistant \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| user \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< \\| system \\| ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< ?start _ of _ turn ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< ?end _ of _ turn ?>", with: "", options: .regularExpression)
+        filtered = filtered.replacingOccurrences(of: "< ?/?bos ?>", with: "", options: .regularExpression)
+
         return filtered
     }
 
@@ -271,7 +287,7 @@ class ChatEngine: ObservableObject {
         var messages: [(role: String, content: String)] = []
 
         // Add system message with markdown instructions
-        messages.append((role: "system", content: "You are a helpful AI assistant running on-device. Format your responses using markdown for better readability. Use **bold** for emphasis, `code` for inline code, ```language for code blocks, bullet points with -, and proper headings with #."))
+        messages.append((role: "system", content: "You are a helpful AI assistant running on-device. Be concise and direct - answer fully but avoid unnecessary verbosity or over-explanation. Get straight to the point. Format your responses using markdown: use **bold** for emphasis, `code` for inline code, ```language for code blocks, and - for bullet points."))
 
         // Add recent conversation history (last 10 messages, excluding streaming ones)
         let recentHistory = history.suffix(10).filter { !$0.isStreaming }
