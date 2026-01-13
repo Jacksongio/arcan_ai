@@ -14,7 +14,12 @@ func llama_batch_add(_ batch: inout llama_batch, _ id: llama_token, _ pos: llama
     batch.pos     [Int(batch.n_tokens)] = pos
     batch.n_seq_id[Int(batch.n_tokens)] = Int32(seq_ids.count)
     for i in 0..<seq_ids.count {
-        batch.seq_id[Int(batch.n_tokens)]![Int(i)] = seq_ids[i]
+        // Safe unwrap to prevent crash on memory-constrained devices
+        guard let seq_id_ptr = batch.seq_id[Int(batch.n_tokens)] else {
+            print("❌ Critical: batch.seq_id[\(batch.n_tokens)] is nil - batch allocation failed")
+            return
+        }
+        seq_id_ptr[Int(i)] = seq_ids[i]
     }
     batch.logits  [Int(batch.n_tokens)] = logits ? 1 : 0
 
@@ -34,7 +39,8 @@ actor LlamaContext {
     /// This variable is used to store temporarily invalid cchars
     private var temporary_invalid_cchars: [CChar]
 
-    var n_len: Int32 = 1024
+    // Reduced from 1024 to 512 to reduce memory usage
+    var n_len: Int32 = 512
     var n_cur: Int32 = 0
 
     var n_decode: Int32 = 0
@@ -43,7 +49,8 @@ actor LlamaContext {
         self.model = model
         self.context = context
         self.tokens_list = []
-        self.batch = llama_batch_init(512, 0, 1)
+        // Reduced batch size from 512 to 256 to reduce memory pressure on devices
+        self.batch = llama_batch_init(256, 0, 1)
         self.temporary_invalid_cchars = []
         let sparams = llama_sampler_chain_default_params()
         self.sampling = llama_sampler_chain_init(sparams)
@@ -67,6 +74,22 @@ actor LlamaContext {
 #if targetEnvironment(simulator)
         model_params.n_gpu_layers = 0
         print("Running on simulator, force use n_gpu_layers = 0")
+#else
+        // Limit GPU layers based on device RAM to prevent Metal allocation failures
+        let physicalMemory = ProcessInfo.processInfo.physicalMemory
+        let memoryGB = Double(physicalMemory) / 1_000_000_000.0
+
+        // Conservative GPU layer limits based on device RAM
+        if memoryGB < 4.0 {
+            model_params.n_gpu_layers = 16  // Low-end devices (older iPhones)
+            print("Device RAM: \(String(format: "%.1f", memoryGB))GB - using \(model_params.n_gpu_layers) GPU layers")
+        } else if memoryGB < 6.0 {
+            model_params.n_gpu_layers = 24  // Mid-range devices
+            print("Device RAM: \(String(format: "%.1f", memoryGB))GB - using \(model_params.n_gpu_layers) GPU layers")
+        } else {
+            model_params.n_gpu_layers = 32  // High-end devices (6GB+)
+            print("Device RAM: \(String(format: "%.1f", memoryGB))GB - using \(model_params.n_gpu_layers) GPU layers")
+        }
 #endif
         let model = llama_model_load_from_file(path, model_params)
         guard let model else {
@@ -78,7 +101,8 @@ actor LlamaContext {
         print("Using \(n_threads) threads")
 
         var ctx_params = llama_context_default_params()
-        ctx_params.n_ctx = 2048
+        // Reduced from 2048 to 1024 to reduce memory pressure and prevent crashes
+        ctx_params.n_ctx = 1024
         ctx_params.n_threads       = Int32(n_threads)
         ctx_params.n_threads_batch = Int32(n_threads)
 

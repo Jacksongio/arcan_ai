@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 @MainActor
 class ChatEngine: ObservableObject {
@@ -18,7 +19,23 @@ class ChatEngine: ObservableObject {
     private var modelPath: URL?
     private var llamaContext: LlamaContext?
 
-    init() {}
+    init() {
+        // Listen for memory warnings and clear KV cache
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                print("⚠️ Memory warning in ChatEngine - clearing KV cache")
+                await self?.clearKVCache()
+            }
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     // Load a downloaded model
     func loadModel(_ model: MLCModel) async throws {
@@ -66,6 +83,13 @@ class ChatEngine: ObservableObject {
     func sendMessage(_ text: String, conversationHistory: [Message]) async throws -> AsyncStream<String> {
         guard isModelLoaded, let llamaContext = llamaContext else {
             throw ChatEngineError.modelNotLoaded
+        }
+
+        // Aggressively clear KV cache on long conversations to prevent memory crashes
+        // Clear every 10 messages to keep memory usage stable
+        if conversationHistory.count > 10 && conversationHistory.count % 10 == 0 {
+            print("⚠️ Long conversation detected (\(conversationHistory.count) messages) - clearing KV cache")
+            await llamaContext.clear()
         }
 
         // Build conversation prompt with chat template
@@ -289,8 +313,9 @@ class ChatEngine: ObservableObject {
         // Add system message with markdown instructions
         messages.append((role: "system", content: "You are a helpful AI assistant running on-device. Be concise and direct - answer fully but avoid unnecessary verbosity or over-explanation. Get straight to the point. Format your responses using markdown: use **bold** for emphasis, `code` for inline code, ```language for code blocks, and - for bullet points."))
 
-        // Add recent conversation history (last 10 messages, excluding streaming ones)
-        let recentHistory = history.suffix(10).filter { !$0.isStreaming }
+        // Reduced from 10 to 6 messages to lower memory usage and prevent KV cache overflow
+        // This prevents crashes on longer conversations on memory-constrained devices
+        let recentHistory = history.suffix(6).filter { !$0.isStreaming }
         for message in recentHistory {
             if message.role == .user {
                 messages.append((role: "user", content: message.content))
@@ -310,6 +335,14 @@ class ChatEngine: ObservableObject {
     func stopGeneration() async {
         if let llamaContext = llamaContext {
             await llamaContext.stop()
+        }
+    }
+
+    // Clear KV cache to free memory (called on memory warnings)
+    func clearKVCache() async {
+        if let llamaContext = llamaContext {
+            await llamaContext.clear()
+            print("✅ KV cache cleared due to memory pressure")
         }
     }
 
