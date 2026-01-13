@@ -169,16 +169,6 @@ struct ChatView: View {
 
             Spacer()
 
-            // Voice Mode Button
-            Button(action: {
-                showVoiceMode = true
-            }) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 18))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .disabled(isGenerating || isLoadingModel || !chatEngine.isModelLoaded)
-
             Button(action: {
                 if showDeleteConfirmation {
                     // Second click - actually delete
@@ -235,6 +225,16 @@ struct ChatView: View {
     // MARK: - Input View
     private var messageInputView: some View {
         HStack(spacing: 12) {
+            // Voice Mode Button (bottom left)
+            Button(action: {
+                showVoiceMode = true
+            }) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .disabled(isGenerating || isLoadingModel || !chatEngine.isModelLoaded)
+
             // Text field with Enter key support
             TextField("Message", text: $messageText, axis: .vertical)
                 .textFieldStyle(.plain)
