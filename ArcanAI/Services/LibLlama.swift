@@ -5,6 +5,10 @@ enum LlamaError: Error {
     case couldNotInitializeContext
 }
 
+// Global flag to ensure backend is only initialized once
+private var llamaBackendInitialized = false
+private let backendLock = NSLock()
+
 func llama_batch_clear(_ batch: inout llama_batch) {
     batch.n_tokens = 0
 }
@@ -39,8 +43,8 @@ actor LlamaContext {
     /// This variable is used to store temporarily invalid cchars
     private var temporary_invalid_cchars: [CChar]
 
-    // Reduced from 1024 to 512 to reduce memory usage
-    var n_len: Int32 = 512
+    // Max tokens to generate per response
+    var n_len: Int32 = 768
     var n_cur: Int32 = 0
 
     var n_decode: Int32 = 0
@@ -49,8 +53,9 @@ actor LlamaContext {
         self.model = model
         self.context = context
         self.tokens_list = []
-        // Reduced batch size from 512 to 256 to reduce memory pressure on devices
-        self.batch = llama_batch_init(256, 0, 1)
+        // Batch size must accommodate context window (1024) + some overhead
+        // Using 512 as a balance between memory and functionality
+        self.batch = llama_batch_init(512, 0, 1)
         self.temporary_invalid_cchars = []
         let sparams = llama_sampler_chain_default_params()
         self.sampling = llama_sampler_chain_init(sparams)
@@ -64,11 +69,21 @@ actor LlamaContext {
         llama_batch_free(batch)
         llama_model_free(model)
         llama_free(context)
-        llama_backend_free()
+        // NOTE: Don't call llama_backend_free() here - it's a global singleton
+        // that should persist for the app lifetime. Calling it here causes
+        // state contamination when switching between models.
     }
 
     static func create_context(path: String) throws -> LlamaContext {
-        llama_backend_init()
+        // Initialize backend only once globally to prevent state contamination
+        backendLock.lock()
+        if !llamaBackendInitialized {
+            print("🔧 Initializing llama.cpp backend (first time)")
+            llama_backend_init()
+            llamaBackendInitialized = true
+        }
+        backendLock.unlock()
+
         var model_params = llama_model_default_params()
 
 #if targetEnvironment(simulator)
@@ -164,6 +179,14 @@ actor LlamaContext {
         let n_kv_req = tokens_list.count + (Int(n_len) - tokens_list.count)
 
         print("\n n_len = \(n_len), n_ctx = \(n_ctx), n_kv_req = \(n_kv_req)")
+        print("tokens_list.count = \(tokens_list.count), batch capacity = \(batch.n_tokens)")
+
+        // Check if prompt exceeds batch size
+        if tokens_list.count > 512 {
+            print("❌ ERROR: Prompt too long (\(tokens_list.count) tokens), exceeds batch size (512)")
+            print("⚠️ Truncating prompt to fit batch size...")
+            tokens_list = Array(tokens_list.suffix(500)) // Leave room for generation
+        }
 
         if n_kv_req > n_ctx {
             print("error: n_kv_req > n_ctx, the required KV cache size is not big enough")

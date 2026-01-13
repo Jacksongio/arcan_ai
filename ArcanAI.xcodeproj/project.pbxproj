@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		835746DC2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf in Resources */ = {isa = PBXBuildFile; fileRef = 835746DB2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf */; };
 		835746DE2F04154A00454292 /* arcanai.png in Resources */ = {isa = PBXBuildFile; fileRef = 835746DD2F04154A00454292 /* arcanai.png */; };
+		83ADF75A2F16C3D0003C71E4 /* VoiceMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83ADF7592F16C3D0003C71E4 /* VoiceMode.swift */; };
 		AA0001 /* ArcanAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000 /* ArcanAIApp.swift */; };
 		AA0003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0002 /* ContentView.swift */; };
 		AA0005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0004 /* Assets.xcassets */; };
@@ -40,6 +41,7 @@
 /* Begin PBXFileReference section */
 		835746DB2F040D7800454292 /* gemma-2-2b-it-Q4_K_M.gguf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "gemma-2-2b-it-Q4_K_M.gguf"; sourceTree = "<group>"; };
 		835746DD2F04154A00454292 /* arcanai.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = arcanai.png; sourceTree = "<group>"; };
+		83ADF7592F16C3D0003C71E4 /* VoiceMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMode.swift; sourceTree = "<group>"; };
 		83D12A102ECE49680098A1F7 /* aracan_logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = aracan_logo.png; sourceTree = "<group>"; };
 		AA0000 /* ArcanAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcanAIApp.swift; sourceTree = "<group>"; };
 		AA0002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 		AA0020 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				83ADF7592F16C3D0003C71E4 /* VoiceMode.swift */,
 				AA0002 /* ContentView.swift */,
 				AA0039 /* ChatView.swift */,
 			);
@@ -227,6 +230,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0003 /* ContentView.swift in Sources */,
+				83ADF75A2F16C3D0003C71E4 /* VoiceMode.swift in Sources */,
 				AA0001 /* ArcanAIApp.swift in Sources */,
 				AA0027 /* MLCModel.swift in Sources */,
 				AA0029 /* ModelManager.swift in Sources */,

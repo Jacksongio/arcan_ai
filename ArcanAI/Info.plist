@@ -50,5 +50,9 @@
     </array>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>ArcanAI needs microphone access to enable voice conversations with your AI assistant.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>ArcanAI needs speech recognition to convert your voice to text for AI conversations.</string>
 </dict>
 </plist>

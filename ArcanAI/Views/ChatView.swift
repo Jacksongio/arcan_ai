@@ -8,9 +8,9 @@
 import SwiftUI
 
 struct ChatView: View {
-    let model: MLCModel
-
     @StateObject private var chatEngine = ChatEngine()
+    @StateObject private var modelManager = ModelManager.shared
+    @State private var selectedModel: MLCModel = MLCModel.defaultModel
     @State private var conversation = Conversation(messages: [], modelId: "")
     @State private var messageText = ""
     @State private var isGenerating = false
@@ -18,7 +18,14 @@ struct ChatView: View {
     @State private var errorMessage = ""
     @State private var generationTask: Task<Void, Never>?
     @State private var showDeleteConfirmation = false
+    @State private var isLoadingModel = false
+    @State private var showManageModels = false
+    @State private var showVoiceMode = false
     @Environment(\.dismiss) var dismiss
+
+    private var availableModels: [MLCModel] {
+        [MLCModel.defaultModel] + modelManager.customModels
+    }
 
     var body: some View {
         ZStack {
@@ -80,6 +87,18 @@ struct ChatView: View {
         } message: {
             Text(errorMessage)
         }
+        .sheet(isPresented: $showManageModels) {
+            ManageModelsView(
+                models: modelManager.customModels,
+                currentModelId: selectedModel.id,
+                onDelete: { model in
+                    deleteModel(model)
+                }
+            )
+        }
+        .fullScreenCover(isPresented: $showVoiceMode) {
+            VoiceMode(model: selectedModel)
+        }
     }
 
     // MARK: - Header
@@ -93,29 +112,83 @@ struct ChatView: View {
 
             Spacer()
 
-            VStack(spacing: 2) {
-                Text("ArcanAI")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+            // Model Picker Dropdown
+            Menu {
+                ForEach(availableModels) { model in
+                    Button(action: {
+                        if model.id != selectedModel.id {
+                            switchModel(to: model)
+                        }
+                    }) {
+                        HStack {
+                            Text(model.name)
+                            if model.id == selectedModel.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(chatEngine.isModelLoaded ? Color.green : Color.gray)
-                        .frame(width: 6, height: 6)
+                if !modelManager.customModels.isEmpty {
+                    Divider()
 
-                    Text(chatEngine.isModelLoaded ? "Ready" : "Loading...")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.7))
+                    Button(action: {
+                        showManageModels = true
+                    }) {
+                        HStack {
+                            Image(systemName: "slider.horizontal.3")
+                            Text("Manage Models")
+                        }
+                    }
+                }
+            } label: {
+                VStack(spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(selectedModel.name)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(chatEngine.isModelLoaded && !isLoadingModel ? Color.green : Color.gray)
+                            .frame(width: 6, height: 6)
+
+                        Text(isLoadingModel ? "Loading..." : (chatEngine.isModelLoaded ? "Ready" : "Loading..."))
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
             }
+            .disabled(isGenerating || isLoadingModel)
 
             Spacer()
+
+            // Voice Mode Button
+            Button(action: {
+                showVoiceMode = true
+            }) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 18))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .disabled(isGenerating || isLoadingModel || !chatEngine.isModelLoaded)
 
             Button(action: {
                 if showDeleteConfirmation {
                     // Second click - actually delete
                     conversation.messages.removeAll()
                     showDeleteConfirmation = false
+                    // Clear KV cache when starting fresh conversation
+                    Task {
+                        await chatEngine.clearKVCache()
+                        print("🗑️ Conversation cleared - KV cache reset")
+                    }
                 } else {
                     // First click - show confirmation
                     showDeleteConfirmation = true
@@ -129,6 +202,7 @@ struct ChatView: View {
                     .font(.system(size: 18))
                     .foregroundColor(showDeleteConfirmation ? .red : .white.opacity(0.7))
             }
+            .disabled(isGenerating || isLoadingModel)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -210,12 +284,49 @@ struct ChatView: View {
     }
 
     private func loadModel() async {
+        isLoadingModel = true
         do {
-            try await chatEngine.loadModel(model)
-            conversation.modelId = model.id
+            await modelManager.ensureModelAvailable(selectedModel)
+            try await chatEngine.loadModel(selectedModel)
+            conversation.modelId = selectedModel.id
         } catch {
             errorMessage = error.localizedDescription
             showErrorAlert = true
+        }
+        isLoadingModel = false
+    }
+
+    private func switchModel(to model: MLCModel) {
+        // Stop any ongoing generation
+        if isGenerating {
+            generationTask?.cancel()
+            generationTask = nil
+            isGenerating = false
+        }
+
+        // Clear conversation when switching models
+        conversation.messages.removeAll()
+        selectedModel = model
+
+        // Load the new model
+        Task {
+            await loadModel()
+        }
+    }
+
+    private func deleteModel(_ model: MLCModel) {
+        Task {
+            do {
+                try modelManager.deleteCustomModel(model)
+
+                // If we deleted the currently selected model, switch to default
+                if selectedModel.id == model.id {
+                    switchModel(to: MLCModel.defaultModel)
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                showErrorAlert = true
+            }
         }
     }
 
@@ -324,27 +435,18 @@ struct MessageBubble: View {
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(LinearGradient(
-                                    gradient: Gradient(colors: [Color.white.opacity(0.15), Color.white.opacity(0.15)]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                        )
                     } else {
                         MarkdownText(message.content)
                             .font(.system(size: 16))
                             .foregroundColor(.white)
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(LinearGradient(
-                                        gradient: Gradient(colors: [Color.white.opacity(0.15), Color.white.opacity(0.15)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                            )
+                            .padding(.vertical, 4)
+                            .contextMenu {
+                                Button(action: {
+                                    copyToClipboard(message.content)
+                                }) {
+                                    Label("Copy", systemImage: "doc.on.doc")
+                                }
+                            }
                     }
                 } else {
                     Text(message.content)
@@ -353,30 +455,30 @@ struct MessageBubble: View {
                         .padding(12)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.purple]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
+                                .fill(Color.white.opacity(0.15))
                         )
+                        .contextMenu {
+                            Button(action: {
+                                copyToClipboard(message.content)
+                            }) {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                        }
+                }
+
+                // Show feedback overlay when copied
+                if showCopiedFeedback {
+                    Text("Copied!")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.8))
+                        .cornerRadius(6)
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: 280, alignment: message.role == .user ? .trailing : .leading)
-
-            // Copy button (only show for assistant messages that are non-empty and non-streaming)
-            if message.role == .assistant && !message.content.isEmpty && !message.isStreaming {
-                Button(action: {
-                    copyToClipboard(message.content)
-                }) {
-                    Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.5))
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
 
             if message.role == .assistant {
                 Spacer()
@@ -393,9 +495,13 @@ struct MessageBubble: View {
         #endif
 
         // Show feedback
-        showCopiedFeedback = true
+        withAnimation {
+            showCopiedFeedback = true
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            showCopiedFeedback = false
+            withAnimation {
+                showCopiedFeedback = false
+            }
         }
     }
 }
@@ -420,6 +526,95 @@ struct MarkdownText: View {
     }
 }
 
+// MARK: - Manage Models View
+struct ManageModelsView: View {
+    let models: [MLCModel]
+    let currentModelId: String
+    let onDelete: (MLCModel) -> Void
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if models.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "cube.box")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.3))
+
+                        Text("No custom models")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+
+                        Text("Upload models from the main screen")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                } else {
+                    List {
+                        ForEach(models) { model in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(model.name)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+
+                                    HStack(spacing: 8) {
+                                        Text(model.params)
+                                        Text("•")
+                                        Text(model.size)
+                                        Text("•")
+                                        Text(model.quantization)
+                                    }
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white.opacity(0.6))
+                                }
+
+                                Spacer()
+
+                                if model.id == currentModelId {
+                                    Text("Active")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.green.opacity(0.2))
+                                        .cornerRadius(6)
+                                }
+                            }
+                            .listRowBackground(Color.white.opacity(0.05))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    onDelete(model)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .navigationTitle("Manage Models")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color.black, for: .navigationBar)
+            .preferredColorScheme(.dark)
+        }
+    }
+}
+
 #Preview {
-    ChatView(model: MLCModel.availableModels[0])
+    ChatView()
 }

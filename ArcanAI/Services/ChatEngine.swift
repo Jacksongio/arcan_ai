@@ -70,6 +70,11 @@ class ChatEngine: ObservableObject {
             if let ctx = llamaContext {
                 let info = await ctx.model_info()
                 print("Model info: \(info)")
+
+                // CRITICAL: Clear any residual KV cache state from previous sessions
+                // This prevents the model from "remembering" old conversations
+                await ctx.clear()
+                print("🧹 KV cache cleared on model load")
             }
         } catch {
             isLoading = false
@@ -83,13 +88,6 @@ class ChatEngine: ObservableObject {
     func sendMessage(_ text: String, conversationHistory: [Message]) async throws -> AsyncStream<String> {
         guard isModelLoaded, let llamaContext = llamaContext else {
             throw ChatEngineError.modelNotLoaded
-        }
-
-        // Aggressively clear KV cache on long conversations to prevent memory crashes
-        // Clear every 10 messages to keep memory usage stable
-        if conversationHistory.count > 10 && conversationHistory.count % 10 == 0 {
-            print("⚠️ Long conversation detected (\(conversationHistory.count) messages) - clearing KV cache")
-            await llamaContext.clear()
         }
 
         // Build conversation prompt with chat template
@@ -313,8 +311,7 @@ class ChatEngine: ObservableObject {
         // Add system message with markdown instructions
         messages.append((role: "system", content: "You are a helpful AI assistant running on-device. Be concise and direct - answer fully but avoid unnecessary verbosity or over-explanation. Get straight to the point. Format your responses using markdown: use **bold** for emphasis, `code` for inline code, ```language for code blocks, and - for bullet points."))
 
-        // Reduced from 10 to 6 messages to lower memory usage and prevent KV cache overflow
-        // This prevents crashes on longer conversations on memory-constrained devices
+        // Include last 6 messages for context (with batch size 512, this is safe)
         let recentHistory = history.suffix(6).filter { !$0.isStreaming }
         for message in recentHistory {
             if message.role == .user {
