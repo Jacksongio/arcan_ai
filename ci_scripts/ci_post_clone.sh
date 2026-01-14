@@ -10,6 +10,48 @@ cd "$(dirname "$0")/.."
 
 echo "=== ArcanAI Xcode Cloud Build Script ==="
 echo "Current directory: $(pwd)"
+
+# ===========================================
+# Download GGUF model from HuggingFace
+# (Bypasses GitHub LFS bandwidth limits)
+# ===========================================
+MODEL_FILE="gemma-2-2b-it-Q4_K_M.gguf"
+MODEL_URL="https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf"
+
+echo ""
+echo "=== Downloading GGUF Model ==="
+
+if [ -f "$MODEL_FILE" ]; then
+    FILE_SIZE=$(stat -f%z "$MODEL_FILE" 2>/dev/null || stat -c%s "$MODEL_FILE" 2>/dev/null || echo "0")
+    # Check if it's a real file (>1GB) or just an LFS pointer (<1KB)
+    if [ "$FILE_SIZE" -gt 1000000000 ]; then
+        echo "✅ Model file already exists and is valid ($FILE_SIZE bytes)"
+    else
+        echo "⚠️ Found LFS pointer file, downloading real model..."
+        rm -f "$MODEL_FILE"
+        curl -L --progress-bar -o "$MODEL_FILE" "$MODEL_URL"
+        echo "✅ Model downloaded successfully"
+    fi
+else
+    echo "📥 Downloading model from HuggingFace..."
+    curl -L --progress-bar -o "$MODEL_FILE" "$MODEL_URL"
+    echo "✅ Model downloaded successfully"
+fi
+
+# Verify download
+if [ -f "$MODEL_FILE" ]; then
+    FINAL_SIZE=$(stat -f%z "$MODEL_FILE" 2>/dev/null || stat -c%s "$MODEL_FILE" 2>/dev/null || echo "0")
+    echo "📦 Model file size: $FINAL_SIZE bytes"
+    if [ "$FINAL_SIZE" -lt 1000000000 ]; then
+        echo "❌ ERROR: Model file seems too small, download may have failed"
+        exit 1
+    fi
+else
+    echo "❌ ERROR: Model file not found after download"
+    exit 1
+fi
+
+echo ""
 echo "Listing repository root:"
 ls -la
 
