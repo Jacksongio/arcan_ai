@@ -308,8 +308,9 @@ class ChatEngine: ObservableObject {
     private func buildPrompt(userMessage: String, history: [Message]) -> String {
         var messages: [(role: String, content: String)] = []
 
-        // Add system message with markdown instructions
-        messages.append((role: "system", content: "You are a helpful AI assistant running on-device. Be concise and direct - answer fully but avoid unnecessary verbosity or over-explanation. Get straight to the point. Format your responses using markdown: use **bold** for emphasis, `code` for inline code, ```language for code blocks, and - for bullet points."))
+        // Add system message from model (or default)
+        let systemPrompt = currentModel?.effectiveSystemPrompt ?? MLCModel.defaultSystemPrompt
+        messages.append((role: "system", content: systemPrompt))
 
         // Include last 6 messages for context (with batch size 512, this is safe)
         let recentHistory = history.suffix(6).filter { !$0.isStreaming }

@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var isImporting = false
     @State private var importError: String?
     @State private var showErrorAlert = false
+    @State private var showSuccessAlert = false
 
     var body: some View {
         NavigationStack {
@@ -152,6 +153,11 @@ struct ContentView: View {
         } message: {
             Text(importError ?? "Unknown error")
         }
+        .alert("Success", isPresented: $showSuccessAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Model uploaded!")
+        }
         }
     }
 
@@ -180,6 +186,7 @@ struct ContentView: View {
                     _ = try await modelManager.importCustomModel(from: fileURL)
                     await MainActor.run {
                         isImporting = false
+                        showSuccessAlert = true
                     }
                 } catch {
                     await MainActor.run {

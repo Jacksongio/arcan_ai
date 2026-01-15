@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ChatView: View {
     @StateObject private var chatEngine = ChatEngine()
@@ -64,6 +65,7 @@ struct ChatView: View {
                         }
                         .padding(16)
                     }
+                    .scrollDismissesKeyboard(.interactively)
                     .onChange(of: conversation.messages.count) { _, _ in
                         // Scroll when new messages are added
                         scrollToBottom(proxy: proxy)
@@ -97,7 +99,7 @@ struct ChatView: View {
             )
         }
         .fullScreenCover(isPresented: $showVoiceMode) {
-            VoiceMode(model: selectedModel)
+            VoiceMode()
         }
     }
 
@@ -287,8 +289,11 @@ struct ChatView: View {
         isLoadingModel = true
         do {
             await modelManager.ensureModelAvailable(selectedModel)
+            try Task.checkCancellation()
             try await chatEngine.loadModel(selectedModel)
             conversation.modelId = selectedModel.id
+        } catch is CancellationError {
+            // Task was cancelled (e.g., app closing), don't show error
         } catch {
             errorMessage = error.localizedDescription
             showErrorAlert = true
@@ -332,6 +337,10 @@ struct ChatView: View {
 
     private func sendMessage() {
         guard !messageText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+
+        // Haptic feedback on send
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
 
         let userMessage = Message(role: .user, content: messageText)
         conversation.addMessage(userMessage)

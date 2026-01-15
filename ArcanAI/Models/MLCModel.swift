@@ -18,6 +18,15 @@ struct MLCModel: Identifiable, Codable, Equatable {
     let quantization: String
     let isCustom: Bool
     let uploadDate: Date?
+    let systemPrompt: String?
+
+    // Default system prompt for concise responses
+    static let defaultSystemPrompt = "You are a helpful AI assistant. Be concise and direct. Give short, informative answers without unnecessary explanation. Get straight to the point."
+
+    // Get the effective system prompt (custom or default)
+    var effectiveSystemPrompt: String {
+        systemPrompt ?? Self.defaultSystemPrompt
+    }
 
     var isDownloaded: Bool {
         let modelPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -41,7 +50,8 @@ struct MLCModel: Identifiable, Codable, Equatable {
         modelLib: "gemma-2-2b-it-Q4_K_M.gguf",
         quantization: "Q4_K_M",
         isCustom: false,
-        uploadDate: nil
+        uploadDate: nil,
+        systemPrompt: nil
     )
 
     static let availableModels: [MLCModel] = [defaultModel]
@@ -66,7 +76,8 @@ extension MLCModel {
             modelLib: filename,
             quantization: quantization,
             isCustom: true,
-            uploadDate: Date()
+            uploadDate: Date(),
+            systemPrompt: nil  // Uses default concise system prompt
         )
     }
 

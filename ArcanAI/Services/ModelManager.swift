@@ -51,9 +51,12 @@ class ModelManager: ObservableObject {
         downloadedModels.removeAll()
 
         for model in MLCModel.availableModels {
-            let modelPath = modelsDirectory.appendingPathComponent(model.id)
-            if fileManager.fileExists(atPath: modelPath.path) {
+            let modelDir = modelsDirectory.appendingPathComponent(model.id)
+            let modelFile = modelDir.appendingPathComponent(model.modelLib)
+            // Verify both the directory and the actual model file exist
+            if fileManager.fileExists(atPath: modelFile.path) {
                 downloadedModels.insert(model.id)
+                print("✅ Found downloaded model: \(model.name)")
             }
         }
     }
@@ -187,8 +190,29 @@ class ModelManager: ObservableObject {
             customModels = []
             return
         }
-        customModels = models
-        print("📚 Loaded \(models.count) custom model(s)")
+
+        // Verify each model still exists on disk and add to downloadedModels
+        var validModels: [MLCModel] = []
+        for model in models {
+            let modelDir = modelsDirectory.appendingPathComponent(model.id)
+            let modelFile = modelDir.appendingPathComponent(model.modelLib)
+            if fileManager.fileExists(atPath: modelFile.path) {
+                validModels.append(model)
+                downloadedModels.insert(model.id)
+                print("✅ Custom model verified: \(model.name)")
+            } else {
+                print("⚠️ Custom model file missing, removing from list: \(model.name)")
+            }
+        }
+
+        customModels = validModels
+
+        // Save if we removed any invalid models
+        if validModels.count != models.count {
+            saveCustomModels()
+        }
+
+        print("📚 Loaded \(validModels.count) custom model(s)")
     }
 
     /// Save custom models to persistent storage
@@ -214,6 +238,11 @@ class ModelManager: ObservableObject {
         // Parse filename to extract metadata
         let filename = sourceURL.lastPathComponent
         print("📥 Importing custom model: \(filename)")
+
+        // Check for duplicate (same filename already imported)
+        if customModels.contains(where: { $0.modelLib == filename }) {
+            throw ModelImportError.duplicateModel
+        }
 
         // Create MLCModel with extracted metadata
         let customModel = MLCModel.fromCustomFile(filename: filename, fileURL: sourceURL)
@@ -483,6 +512,7 @@ enum ModelImportError: Error, LocalizedError {
     case cannotDeleteDefaultModel
     case copyFailed(String)
     case invalidGGUFFile
+    case duplicateModel
 
     var errorDescription: String? {
         switch self {
@@ -500,6 +530,8 @@ enum ModelImportError: Error, LocalizedError {
             return "Failed to copy file: \(message)"
         case .invalidGGUFFile:
             return "Invalid GGUF file format. Please ensure you're uploading a valid .gguf model file."
+        case .duplicateModel:
+            return "Model already uploaded."
         }
     }
 }

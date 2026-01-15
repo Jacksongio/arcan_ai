@@ -10,14 +10,13 @@ import Speech
 import AVFoundation
 
 struct VoiceMode: View {
-    let model: MLCModel
     @StateObject private var voiceManager = VoiceManager()
     @StateObject private var chatEngine = ChatEngine()
     @Environment(\.dismiss) var dismiss
 
     @State private var conversationHistory: [Message] = []
     @State private var currentTranscript = ""
-    @State private var isThinking = false
+    @State private var isProcessing = false  // Shows stop button during thinking/speaking
 
     var body: some View {
         ZStack {
@@ -64,7 +63,7 @@ struct VoiceMode: View {
                             .foregroundColor(.white.opacity(0.9))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
-                    } else if isThinking {
+                    } else if isProcessing {
                         Text("Thinking...")
                             .font(.system(size: 24, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
@@ -91,22 +90,25 @@ struct VoiceMode: View {
                     ZStack {
                         Circle()
                             .fill(
-                                voiceManager.isListening ? Color.red :
-                                voiceManager.isSpeaking ? Color.orange :
+                                voiceManager.isListening ? Color.blue :
+                                isProcessing || voiceManager.isSpeaking ? Color.red :
                                 Color.blue
                             )
                             .frame(width: 80, height: 80)
-                            .shadow(color: voiceManager.isListening ? .red.opacity(0.5) : .blue.opacity(0.5), radius: 20)
+                            .shadow(color: isProcessing || voiceManager.isSpeaking ? .red.opacity(0.5) : .blue.opacity(0.5), radius: 20)
 
                         if voiceManager.isListening {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 32))
+                            // Submit arrow when listening
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 32, weight: .bold))
                                 .foregroundColor(.white)
-                        } else if voiceManager.isSpeaking {
+                        } else if isProcessing || voiceManager.isSpeaking {
+                            // Stop button when processing or speaking
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 32))
                                 .foregroundColor(.white)
                         } else {
+                            // Mic when idle
                             Image(systemName: "mic.fill")
                                 .font(.system(size: 32))
                                 .foregroundColor(.white)
@@ -131,15 +133,23 @@ struct VoiceMode: View {
                 sendTranscribedMessage()
             }
         }
+        .onChange(of: voiceManager.isSpeaking) { _, isSpeaking in
+            // Reset processing state when speaking finishes
+            if !isSpeaking && isProcessing {
+                isProcessing = false
+            }
+        }
     }
 
     private func handleMainButtonTap() {
         if voiceManager.isListening {
-            // Stop listening and process
+            // Submit - stop listening and immediately show processing state
             voiceManager.stopListening()
-        } else if voiceManager.isSpeaking {
-            // Interrupt AI speaking
+            isProcessing = true
+        } else if isProcessing || voiceManager.isSpeaking {
+            // Stop processing/speaking
             voiceManager.stopSpeaking()
+            isProcessing = false
         } else {
             // Start listening
             currentTranscript = ""
@@ -149,7 +159,11 @@ struct VoiceMode: View {
 
     private func loadModel() async {
         do {
-            try await chatEngine.loadModel(model)
+            try Task.checkCancellation()
+            // Always use the built-in Gemma model for voice mode
+            try await chatEngine.loadModel(MLCModel.defaultModel)
+        } catch is CancellationError {
+            // Task was cancelled (e.g., view dismissed), don't log error
         } catch {
             print("Error loading model: \(error)")
         }
@@ -160,11 +174,14 @@ struct VoiceMode: View {
     }
 
     private func sendTranscribedMessage() {
-        guard !currentTranscript.isEmpty else { return }
+        guard !currentTranscript.isEmpty else {
+            isProcessing = false
+            return
+        }
 
         let userMessage = currentTranscript
         currentTranscript = ""
-        isThinking = true
+        // isProcessing is already true from handleMainButtonTap
 
         // Add user message to history
         let message = Message(role: .user, content: userMessage)
@@ -183,18 +200,16 @@ struct VoiceMode: View {
                     fullResponse += token
                 }
 
-                isThinking = false
-
                 // Add assistant response to history
                 let assistantMessage = Message(role: .assistant, content: fullResponse)
                 conversationHistory.append(assistantMessage)
 
-                // Speak the response
+                // Speak the response (isProcessing stays true while speaking)
                 voiceManager.speak(fullResponse)
 
             } catch {
                 print("Error during inference: \(error)")
-                isThinking = false
+                isProcessing = false
             }
         }
     }
