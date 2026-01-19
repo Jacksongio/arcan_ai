@@ -77,7 +77,7 @@ struct ContentView: View {
                 }
 
                 // Main title
-                Text("Welcome to ArcanAI!")
+                Text("Welcome to ArcanAI")
                     .font(.system(size: 42, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .shadow(color: Color.blue.opacity(0.5), radius: 20, x: 0, y: 0)
