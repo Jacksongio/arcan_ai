@@ -1,8 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { Message } from '../types';
-import { colors, radii, spacing } from '../theme/colors';
+import { Message } from '../shared/types';
+import { colors, radii, spacing } from '../shared/theme';
 import { MarkdownText } from './MarkdownText';
 
 interface Props {

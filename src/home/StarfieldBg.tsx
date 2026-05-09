@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors } from '../shared/theme';
 
 interface Star {
   x: number;

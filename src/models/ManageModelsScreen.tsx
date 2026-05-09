@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useModelStore } from '../store';
-import { deleteModel, modelsDiskUsage, refreshModels } from '../services/modelManager';
-import { colors, radii, spacing } from '../theme/colors';
+import { useModelStore } from './modelStore';
+import { deleteModel, modelsDiskUsage, refreshModels } from './modelManager';
+import { colors, radii, spacing } from '../shared/theme';
 
 function humanBytes(bytes: number): string {
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(2)} GB`;

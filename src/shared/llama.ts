@@ -65,10 +65,6 @@ export async function unloadModel(): Promise<void> {
   }
 }
 
-export function getContext(): LlamaContext | null {
-  return ctx;
-}
-
 export function getLoadedPath(): string | null {
   return loadedModelPath;
 }

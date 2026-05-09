@@ -14,15 +14,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import HapticFeedback from 'react-native-haptic-feedback';
-import { useChatStore, useModelStore } from '../store';
-import { MessageBubble } from '../components/MessageBubble';
-import { colors, radii, spacing } from '../theme/colors';
+import { useChatStore } from '../shared';
+import { useModelStore } from '../models';
+import { MessageBubble } from './MessageBubble';
+import { colors, radii, spacing } from '../shared/theme';
 import {
   cancelGeneration,
   ensureModelLoaded,
   isGenerating,
   sendMessage,
-} from '../services/chatEngine';
+} from './chatEngine';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Chat'>;
@@ -113,9 +114,7 @@ export function ChatScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {headerTitle}
         </Text>
-        <Pressable onPress={() => nav.navigate('Voice', { conversationId })} hitSlop={12}>
-          <Text style={styles.headerBtn}>Voice</Text>
-        </Pressable>
+        <View style={{ width: 50 }} />
       </View>
 
       <KeyboardAvoidingView

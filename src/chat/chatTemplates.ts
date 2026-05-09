@@ -1,11 +1,11 @@
-import { Message, ModelFamily } from '../types';
+import { Message, ModelFamily } from '../shared/types';
 
 /**
  * Format a chat history into the prompt string a given model family expects.
  * Mirrors the templates used in the prior Swift ChatEngine: each family has its
  * own role markers, end-of-turn sentinels, and stop tokens.
  */
-export interface FormattedPrompt {
+interface FormattedPrompt {
   prompt: string;
   /** Token strings that should halt generation. */
   stopTokens: string[];

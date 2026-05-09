@@ -1,7 +1,7 @@
-import { MLCModel, Message, createMessage } from '../types';
-import { useChatStore, useSettingsStore } from '../store';
+import { MLCModel, Message, createMessage } from '../shared/types';
+import { useChatStore, useSettingsStore } from '../shared';
 import { buildPrompt, stripSpecialTokens } from './chatTemplates';
-import { complete, getLoadedPath, loadModel, stopCompletion } from './llama';
+import { complete, getLoadedPath, loadModel, stopCompletion } from '../shared/llama';
 
 interface SendOptions {
   conversationId: string;

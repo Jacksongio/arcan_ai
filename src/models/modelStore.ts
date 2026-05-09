@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { MLCModel } from '../types';
-import { KEYS, readJSON, storage, writeJSON } from './persistence';
+import { MLCModel } from '../shared/types';
+import { KEYS, readJSON, storage, writeJSON } from '../shared/persistence';
 
 interface ModelState {
   models: MLCModel[];

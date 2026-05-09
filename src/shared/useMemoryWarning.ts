@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { AppState, NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import { releaseAll } from '../services/llama';
+import { releaseAll } from './llama';
 
 /**
  * Hook into low-memory signals so we can free the loaded llama context before

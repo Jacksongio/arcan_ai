@@ -1,5 +1,5 @@
-import { buildPrompt, stripSpecialTokens } from '../src/services/chatTemplates';
-import { Message } from '../src/types';
+import { buildPrompt, stripSpecialTokens } from '../src/chat/chatTemplates';
+import { Message } from '../src/shared/types';
 
 const userMsg = (content: string): Message => ({
   id: 'u1',

@@ -13,17 +13,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { StarfieldBg } from '../components/StarfieldBg';
-import { colors, radii, spacing } from '../theme/colors';
-import { useChatStore, useModelStore } from '../store';
+import { StarfieldBg } from './StarfieldBg';
+import { colors, radii, spacing } from '../shared/theme';
+import { useChatStore } from '../shared';
 import {
+  useModelStore,
   MODEL_DOWNLOAD_URL,
   RECOMMENDED_MODELS,
   importGGUFFromPicker,
   refreshModels,
-} from '../services/modelManager';
+} from '../models';
 import { RootStackParamList } from '../navigation/RootNavigator';
-import { MLCModel } from '../types';
+import { MLCModel } from '../shared/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 

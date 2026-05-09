@@ -1,7 +1,7 @@
 import RNFS from 'react-native-fs';
 import { keepLocalCopy, pick } from '@react-native-documents/picker';
-import { MLCModel, parseModelFilename } from '../types';
-import { useModelStore } from '../store';
+import { MLCModel, parseModelFilename } from '../shared/types';
+import { useModelStore } from './modelStore';
 
 /** Where imported .gguf files live on device. */
 export const MODELS_DIR = `${RNFS.DocumentDirectoryPath}/models`;

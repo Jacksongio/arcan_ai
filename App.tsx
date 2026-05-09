@@ -4,9 +4,9 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { useChatStore, useModelStore, useSettingsStore } from './src/store';
-import { useMemoryWarning } from './src/hooks/useMemoryWarning';
-import { colors } from './src/theme/colors';
+import { useChatStore, useSettingsStore, colors } from './src/shared';
+import { useModelStore } from './src/models';
+import { useMemoryWarning } from './src/shared/useMemoryWarning';
 
 const navTheme = {
   ...DarkTheme,

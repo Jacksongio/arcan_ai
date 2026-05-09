@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { KEYS, readJSON, writeJSON } from './persistence';
 
-export interface Settings {
+interface Settings {
   ttsEnabled: boolean;
   hapticsEnabled: boolean;
   systemPrompt: string;

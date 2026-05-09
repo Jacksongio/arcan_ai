@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Conversation, createConversation, Message } from '../types';
+import { Conversation, createConversation, Message } from './types';
 import { KEYS, readJSON, storage, writeJSON } from './persistence';
 
 interface ChatState {

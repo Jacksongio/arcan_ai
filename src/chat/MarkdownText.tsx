@@ -1,7 +1,7 @@
 import React from 'react';
 import Markdown from 'react-native-markdown-display';
 import { StyleSheet } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors } from '../shared/theme';
 
 interface Props {
   content: string;
