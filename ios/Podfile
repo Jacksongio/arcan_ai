@@ -1,0 +1,52 @@
+# Resolve react_native_pods.rb with node to allow for hoisting
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+linkage = ENV['USE_FRAMEWORKS']
+if linkage != nil
+  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage.to_sym
+end
+
+target 'ArcanAI' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      # :ccache_enabled => true
+    )
+
+    # RN 0.85's bridging headers require C++20 (`requires` clauses, concepts).
+    # Force every pod target to compile its Obj-C++ at C++20.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+      end
+    end
+
+    # Some podspecs (e.g. llama.rn) hardcode `-std=c++17` in OTHER_CPLUSPLUSFLAGS
+    # via xcconfig, which overrides CLANG_CXX_LANGUAGE_STANDARD. Strip it post-hoc.
+    Dir.glob(File.join(installer.config.installation_root, 'Pods', 'Target Support Files', '**', '*.xcconfig')).each do |xcconfig|
+      contents = File.read(xcconfig)
+      patched = contents.gsub(/-std=c\+\+1[7-9z]/, '-std=c++20').gsub(/-std=c\+\+0[xz]/, '-std=c++20')
+      if patched != contents
+        File.write(xcconfig, patched)
+      end
+    end
+  end
+end
