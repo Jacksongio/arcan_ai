@@ -14,22 +14,22 @@ export const MODEL_DOWNLOAD_URL = 'https://huggingface.co/models?library=gguf&so
 /** Curated suggestions shown on the "no models" empty state. */
 export const RECOMMENDED_MODELS: Array<{ name: string; url: string; size: string; note: string }> = [
   {
-    name: 'Gemma 2 2B Instruct (Q4_K_M)',
+    name: 'Llama 3.2 1B Instruct (IQ3_M)',
+    url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF',
+    size: '~570 MB',
+    note: 'Best for older iPhones. Fast and lightweight with solid instruction following.',
+  },
+  {
+    name: 'Gemma 2 2B Instruct (IQ3_M)',
     url: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF',
-    size: '~1.7 GB',
-    note: 'Recommended starter — fits on most phones, good quality.',
+    size: '~1.0 GB',
+    note: 'Great balance of size and quality. Fits comfortably on most devices.',
   },
   {
-    name: 'Llama 3.2 3B Instruct (Q4_K_M)',
-    url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF',
-    size: '~2.0 GB',
-    note: 'Slightly larger, sharper reasoning. Needs ~3 GB free RAM.',
-  },
-  {
-    name: 'Phi 3.5 Mini Instruct (Q4_K_M)',
-    url: 'https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF',
-    size: '~2.3 GB',
-    note: 'Strong instruction following. Higher RAM use.',
+    name: 'Qwen 2.5 3B Instruct (IQ3_M)',
+    url: 'https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF',
+    size: '~1.5 GB',
+    note: 'Strong multilingual support. Great at structured tasks and code.',
   },
 ];
 
@@ -58,7 +58,7 @@ function buildModel(filePath: string, sizeBytes: number): MLCModel {
     sizeLabel: humanBytes(sizeBytes),
     quantization: meta.quantization,
     parameters: meta.parameters,
-    recommendedCtx: 1024,
+    recommendedCtx: 4096,
   };
 }
 

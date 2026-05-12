@@ -44,7 +44,7 @@ export async function loadModel(opts: LoadOptions): Promise<LlamaContext> {
   }
   ctx = await initLlama({
     model: opts.modelPath,
-    n_ctx: opts.contextSize ?? 1024,
+    n_ctx: opts.contextSize ?? 4096,
     n_batch: opts.batchSize ?? 512,
     n_gpu_layers: opts.gpuLayers ?? defaultGpuLayers(),
     embedding: opts.embedding ?? false,

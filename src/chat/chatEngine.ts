@@ -16,6 +16,37 @@ export function isGenerating(): boolean {
   return inFlight;
 }
 
+const MIN_CTX = 4096;
+const CHARS_PER_TOKEN = 3.5;
+const TEMPLATE_OVERHEAD = 200;
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+function trimHistory(
+  messages: Message[],
+  systemPrompt: string,
+  contextSize: number,
+  reserveForResponse: number,
+): Message[] {
+  const budget = contextSize - reserveForResponse - TEMPLATE_OVERHEAD;
+  const systemTokens = estimateTokens(systemPrompt);
+
+  let available = budget - systemTokens;
+  if (available <= 0) return messages.slice(-1);
+
+  const result: Message[] = [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const cost = estimateTokens(messages[i].content);
+    if (cost > available && result.length > 0) break;
+    available -= cost;
+    result.unshift(messages[i]);
+  }
+
+  return result;
+}
+
 export async function ensureModelLoaded(model: MLCModel): Promise<void> {
   if (!model.filePath) {
     throw new Error('Model has no file path on disk');
@@ -23,15 +54,11 @@ export async function ensureModelLoaded(model: MLCModel): Promise<void> {
   if (getLoadedPath() === model.filePath) return;
   await loadModel({
     modelPath: model.filePath,
-    contextSize: model.recommendedCtx ?? 1024,
+    contextSize: Math.max(model.recommendedCtx ?? MIN_CTX, MIN_CTX),
     batchSize: 512,
   });
 }
 
-/**
- * Append the user message, append a streaming assistant placeholder, drive the
- * generation loop, and update the store as tokens arrive.
- */
 export async function sendMessage(opts: SendOptions): Promise<Message> {
   if (inFlight) throw new Error('A response is already being generated');
   inFlight = true;
@@ -48,8 +75,16 @@ export async function sendMessage(opts: SendOptions): Promise<Message> {
   try {
     await ensureModelLoaded(opts.model);
 
+    const contextSize = Math.max(opts.model.recommendedCtx ?? MIN_CTX, MIN_CTX);
     const conv = useChatStore.getState().conversations.find(c => c.id === opts.conversationId);
-    const history = conv?.messages.filter(m => m.id !== assistantMsg.id) ?? [];
+    const allMessages = conv?.messages.filter(m => m.id !== assistantMsg.id) ?? [];
+
+    const history = trimHistory(
+      allMessages,
+      settings.systemPrompt,
+      contextSize,
+      settings.maxTokens,
+    );
 
     const { prompt, stopTokens } = buildPrompt(opts.model.family, settings.systemPrompt, history);
 

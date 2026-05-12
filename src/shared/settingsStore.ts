@@ -12,8 +12,8 @@ interface Settings {
 const DEFAULTS: Settings = {
   ttsEnabled: true,
   hapticsEnabled: true,
-  systemPrompt: 'You are ArcanAI, a helpful, concise on-device assistant. Keep replies focused and clear.',
-  temperature: 0.7,
+  systemPrompt: 'You are ArcanAI, a helpful assistant. Answer ONLY what the user asks. Be brief and direct. Do not add extra commentary, tangents, or unrelated information. Stop after answering the question.',
+  temperature: 0.5,
   maxTokens: 512,
 };
 

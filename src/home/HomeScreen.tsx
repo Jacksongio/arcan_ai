@@ -28,7 +28,7 @@ import { RootStackParamList } from '../navigation/RootNavigator';
 import { MLCModel } from '../shared/types';
 import { storage, KEYS } from '../shared/persistence';
 
-const SHOW_DEBUG = true;
+const SHOW_DEBUG = false;
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
