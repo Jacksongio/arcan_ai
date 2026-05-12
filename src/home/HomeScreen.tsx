@@ -18,6 +18,7 @@ import { colors, radii, spacing } from '../shared/theme';
 import { useChatStore } from '../shared';
 import {
   useModelStore,
+  MAX_MODELS,
   MODEL_DOWNLOAD_URL,
   RECOMMENDED_MODELS,
   importGGUFFromPicker,
@@ -43,6 +44,10 @@ export function HomeScreen() {
 
   const onImport = async () => {
     if (importing) return;
+    if (models.length >= MAX_MODELS) {
+      Alert.alert('Model limit reached', `You can store up to ${MAX_MODELS} models. Delete one before adding another.`);
+      return;
+    }
     try {
       setImporting(true);
       const m = await importGGUFFromPicker();
@@ -91,7 +96,7 @@ export function HomeScreen() {
 
       <View style={styles.footer}>
         <Pressable onPress={onPrimary} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
-          <Text style={styles.primaryText}>💬  Start Chat</Text>
+          <Text style={styles.primaryText}>Start Chat</Text>
         </Pressable>
 
         {models.length > 0 ? (

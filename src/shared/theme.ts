@@ -13,5 +13,18 @@ export const colors = {
   ok: '#3BD16F',
 } as const;
 
-export const radii = { sm: 6, md: 12, lg: 18, pill: 999 } as const;
+/** Liquid-glass tokens — translucent fills + edge highlights to fake iOS 26 glass. */
+export const glass = {
+  surfaceLow: 'rgba(255, 255, 255, 0.04)',
+  surface: 'rgba(255, 255, 255, 0.06)',
+  surfaceHigh: 'rgba(255, 255, 255, 0.09)',
+  accentTint: 'rgba(138, 107, 255, 0.14)',
+  accentTintStrong: 'rgba(138, 107, 255, 0.22)',
+  highlight: 'rgba(255, 255, 255, 0.14)',
+  highlightStrong: 'rgba(255, 255, 255, 0.22)',
+  edge: 'rgba(255, 255, 255, 0.08)',
+  shadow: 'rgba(0, 0, 0, 0.45)',
+} as const;
+
+export const radii = { sm: 6, md: 14, lg: 22, xl: 28, pill: 999 } as const;
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

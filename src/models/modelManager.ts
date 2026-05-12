@@ -3,6 +3,8 @@ import { keepLocalCopy, pick } from '@react-native-documents/picker';
 import { MLCModel, parseModelFilename } from '../shared/types';
 import { useModelStore } from './modelStore';
 
+export const MAX_MODELS = 5;
+
 /** Where imported .gguf files live on device. */
 export const MODELS_DIR = `${RNFS.DocumentDirectoryPath}/models`;
 
@@ -72,6 +74,9 @@ export async function refreshModels(): Promise<MLCModel[]> {
 
 /** Open the platform document picker, copy chosen .gguf into our models dir. */
 export async function importGGUFFromPicker(): Promise<MLCModel | null> {
+  if (useModelStore.getState().models.length >= MAX_MODELS) {
+    throw new Error(`You can store up to ${MAX_MODELS} models. Delete one before adding another.`);
+  }
   const [picked] = await pick({ mode: 'import' });
   if (!picked) return null;
 

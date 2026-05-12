@@ -17,6 +17,7 @@ interface ChatState {
     messageId: string,
     updater: (m: Message) => Message,
   ) => void;
+  truncateFromMessage: (conversationId: string, messageId: string) => void;
   clearCurrent: () => void;
   current: () => Conversation | undefined;
 }
@@ -82,6 +83,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         : c,
     );
+    persist({ conversations, currentConversationId: get().currentConversationId });
+    set({ conversations });
+  },
+
+  truncateFromMessage: (conversationId, messageId) => {
+    const conversations = get().conversations.map(c => {
+      if (c.id !== conversationId) return c;
+      const idx = c.messages.findIndex(m => m.id === messageId);
+      if (idx < 0) return c;
+      return { ...c, messages: c.messages.slice(0, idx), updatedAt: Date.now() };
+    });
     persist({ conversations, currentConversationId: get().currentConversationId });
     set({ conversations });
   },

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,7 +18,7 @@ import HapticFeedback from 'react-native-haptic-feedback';
 import { useChatStore } from '../shared';
 import { useModelStore } from '../models';
 import { MessageBubble } from './MessageBubble';
-import { colors, radii, spacing } from '../shared/theme';
+import { colors, glass, radii, spacing } from '../shared/theme';
 import {
   cancelGeneration,
   ensureModelLoaded,
@@ -36,13 +37,40 @@ export function ChatScreen() {
 
   const conversation = useChatStore(s => s.conversations.find(c => c.id === conversationId));
   const clearCurrent = useChatStore(s => s.clearCurrent);
+  const truncateFromMessage = useChatStore(s => s.truncateFromMessage);
   const selectedModel = useModelStore(s =>
     s.models.find(m => m.id === (conversation?.modelId ?? s.selectedModelId)),
   );
 
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [focused, setFocused] = useState(false);
   const listRef = useRef<FlatList<any>>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  const scrollToEnd = useCallback(() => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
+
+  const onEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    if (busy || isGenerating() || !selectedModel) return;
+    truncateFromMessage(conversationId, messageId);
+    setBusy(true);
+    try {
+      await sendMessage({
+        conversationId,
+        model: selectedModel,
+        userInput: newContent,
+        onAssistantToken: () => scrollToEnd(),
+      });
+    } catch (err: any) {
+      console.warn('sendMessage failed', err?.message ?? err);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, conversationId, selectedModel, truncateFromMessage, scrollToEnd]);
 
   useEffect(() => {
     if (selectedModel) {
@@ -53,12 +81,6 @@ export function ChatScreen() {
   }, [selectedModel]);
 
   const messages = conversation?.messages ?? [];
-
-  const scrollToEnd = useCallback(() => {
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    });
-  }, []);
 
   useEffect(scrollToEnd, [messages.length, scrollToEnd]);
 
@@ -80,7 +102,6 @@ export function ChatScreen() {
         onAssistantToken: () => scrollToEnd(),
       });
     } catch (err: any) {
-      // already written into the bubble as [error: ...]
       console.warn('sendMessage failed', err?.message ?? err);
     } finally {
       setBusy(false);
@@ -104,17 +125,27 @@ export function ChatScreen() {
   };
 
   const headerTitle = useMemo(() => selectedModel?.displayName ?? 'No model', [selectedModel]);
+  const canSend = input.trim().length > 0;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => nav.goBack()} hitSlop={12}>
-          <Text style={styles.headerBtn}>‹ Back</Text>
+        <Pressable onPress={() => nav.goBack()} hitSlop={12} style={styles.backBtn}>
+          <Text style={styles.backArrow}>{'‹'}</Text>
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {headerTitle}
-        </Text>
-        <View style={{ width: 50 }} />
+        <View style={styles.headerCenter}>
+          <View style={styles.statusDot} />
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {headerTitle}
+          </Text>
+        </View>
+        {messages.length > 0 ? (
+          <Pressable onPress={onClear} hitSlop={12} style={styles.clearBtn}>
+            <Text style={styles.clearBtnText}>Clear</Text>
+          </Pressable>
+        ) : (
+          <View style={{ width: 32 }} />
+        )}
       </View>
 
       <KeyboardAvoidingView
@@ -125,111 +156,336 @@ export function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={m => m.id}
-          renderItem={({ item }) => <MessageBubble message={item} />}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              onEdit={item.role === 'user' ? (content) => onEditMessage(item.id, content) : undefined}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           onContentSizeChange={scrollToEnd}
-          ListEmptyComponent={<EmptyChat />}
+          ListEmptyComponent={<EmptyChat onSuggestion={(text) => {
+            setInput(text);
+            setTimeout(() => inputRef.current?.focus(), 100);
+          }} />}
         />
 
-        <View style={styles.inputRow}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="Message"
-            placeholderTextColor={colors.textDim}
-            style={styles.input}
-            multiline
-            editable={!busy}
-          />
-          {busy ? (
-            <Pressable onPress={onCancel} style={[styles.sendBtn, { backgroundColor: colors.danger }]}>
-              <Text style={styles.sendBtnText}>Stop</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={onSend}
-              style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]}
-              disabled={!input.trim()}>
-              <Text style={styles.sendBtnText}>Send</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.footerRow}>
-          <Pressable onPress={onClear}>
-            <Text style={styles.footerLink}>Clear</Text>
-          </Pressable>
+        <View style={styles.inputWrapper}>
+          <View style={[styles.inputGlass, focused && styles.inputGlassFocused]}>
+            <View pointerEvents="none" style={styles.glassEdgeTop} />
+            <View pointerEvents="none" style={styles.glassEdgeBottom} />
+            <TextInput
+              ref={inputRef}
+              value={input}
+              onChangeText={setInput}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder="Message ArcanAI..."
+              placeholderTextColor={colors.textDim}
+              style={styles.input}
+              multiline
+              editable={!busy}
+              returnKeyType="default"
+            />
+            {busy ? (
+              <Pressable onPress={onCancel} style={styles.stopBtn}>
+                <View style={styles.stopIcon} />
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={onSend}
+                style={[styles.sendBtn, canSend && styles.sendBtnActive]}
+                disabled={!canSend}>
+                <Text style={[styles.sendArrow, !canSend && styles.sendArrowDim]}>{'↑'}</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function EmptyChat() {
+const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
+  { label: 'Explain a concept', prompt: 'Explain how neural networks learn, in simple terms.' },
+  { label: 'Brainstorm ideas', prompt: 'Give me 5 creative weekend project ideas.' },
+  { label: 'Write something', prompt: 'Write a short poem about the ocean at night.' },
+  { label: 'Plan & summarize', prompt: 'Help me plan a productive morning routine.' },
+];
+
+function EmptyChat({ onSuggestion }: { onSuggestion: (text: string) => void }) {
   return (
     <View style={styles.emptyChat}>
-      <Text style={styles.emptyChatTitle}>Start the conversation</Text>
-      <Text style={styles.emptyChatBody}>
-        All inference happens on your device. Nothing is sent to the cloud.
-      </Text>
+      <Image
+        source={require('../../assets/clipped_logo.png')}
+        style={styles.emptyLogo}
+        resizeMode="contain"
+      />
+      <Text style={styles.emptyChatTitle}>How can I help?</Text>
+
+      <View style={styles.suggestions}>
+        {SUGGESTIONS.map((s, i) => (
+          <Pressable
+            key={i}
+            onPress={() => onSuggestion(s.prompt)}
+            style={({ pressed }) => [
+              styles.suggestCard,
+              pressed && styles.suggestPressed,
+            ]}>
+            <View pointerEvents="none" style={styles.glassEdgeTop} />
+            <View pointerEvents="none" style={styles.glassEdgeBottom} />
+            <View style={styles.suggestText}>
+              <Text style={styles.suggestLabel}>{s.label}</Text>
+              <Text style={styles.suggestPrompt} numberOfLines={2}>
+                {s.prompt}
+              </Text>
+            </View>
+            <View style={styles.suggestArrowWrap}>
+              <Text style={styles.suggestArrow}>{'↗'}</Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
-    gap: spacing.md,
   },
-  headerBtn: { color: colors.accent, fontSize: 15, fontWeight: '600' },
-  headerTitle: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  backBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backArrow: {
+    color: colors.accent,
+    fontSize: 28,
+    fontWeight: '300',
+    marginTop: -2,
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.ok,
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  clearBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  clearBtnText: {
+    color: colors.textDim,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
   listContent: { paddingVertical: spacing.md, flexGrow: 1 },
 
-  inputRow: {
+  inputWrapper: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  inputGlass: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    backgroundColor: glass.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: glass.edge,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: Platform.OS === 'ios' ? 6 : 2,
     gap: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  inputGlassFocused: {
+    borderColor: 'rgba(138, 107, 255, 0.45)',
+    backgroundColor: glass.surfaceHigh,
+    shadowColor: colors.accent,
+    shadowOpacity: 0.25,
   },
   input: {
     flex: 1,
-    minHeight: 40,
-    maxHeight: 140,
-    backgroundColor: colors.bgInput,
+    minHeight: 36,
+    maxHeight: 120,
     color: colors.text,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
     fontSize: 16,
+    lineHeight: 22,
+    paddingTop: Platform.OS === 'ios' ? 8 : 6,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 6,
   },
   sendBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    minWidth: 72,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: glass.surfaceHigh,
+    borderWidth: 1,
+    borderColor: glass.edge,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Platform.OS === 'ios' ? 3 : 0,
   },
-  sendBtnText: { color: '#FFFFFF', fontWeight: '700' },
+  sendBtnActive: {
+    backgroundColor: colors.accent,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: colors.accent,
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  sendArrow: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '700',
+    marginTop: -1,
+  },
+  sendArrowDim: {
+    color: colors.textDim,
+  },
+  stopBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Platform.OS === 'ios' ? 3 : 0,
+    shadowColor: colors.danger,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  stopIcon: {
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
+  },
 
-  footerRow: {
+  emptyChat: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+  emptyLogo: {
+    width: 160,
+    height: 160,
+    marginBottom: spacing.lg,
+    shadowColor: colors.accent,
+    shadowOpacity: 0.6,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  emptyChatTitle: {
+    color: colors.text,
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: spacing.md,
+    textShadowColor: 'rgba(138, 107, 255, 0.45)',
+    textShadowRadius: 14,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  suggestions: {
+    width: '100%',
+    maxWidth: 440,
+    gap: 10,
+  },
+  suggestCard: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    backgroundColor: glass.surface,
+    borderWidth: 1,
+    borderColor: glass.edge,
+    borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingVertical: 14,
+    gap: spacing.md,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
-  footerLink: { color: colors.textDim, fontSize: 13 },
+  suggestPressed: {
+    backgroundColor: glass.accentTint,
+    borderColor: 'rgba(138, 107, 255, 0.45)',
+    transform: [{ scale: 0.985 }],
+  },
+  suggestText: {
+    flex: 1,
+  },
+  suggestLabel: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  suggestPrompt: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  suggestArrowWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: glass.accentTint,
+    borderWidth: 1,
+    borderColor: 'rgba(138, 107, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestArrow: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
-  emptyChat: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  emptyChatTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: spacing.sm },
-  emptyChatBody: { color: colors.textDim, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  glassEdgeTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: glass.highlight,
+  },
+  glassEdgeBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  },
 });
