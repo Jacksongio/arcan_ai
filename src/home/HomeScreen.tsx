@@ -26,6 +26,9 @@ import {
 } from '../models';
 import { RootStackParamList } from '../navigation/RootNavigator';
 import { MLCModel } from '../shared/types';
+import { storage, KEYS } from '../shared/persistence';
+
+const SHOW_DEBUG = true;
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -83,6 +86,20 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <StarfieldBg count={260} />
+
+      {SHOW_DEBUG && (
+        <View style={styles.debugRow}>
+          <Pressable
+            onPress={() => {
+              storage.delete(KEYS.onboardingDone);
+              nav.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+            }}
+            hitSlop={8}
+            style={styles.debugBtn}>
+            <Text style={styles.debugText}>Debug</Text>
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.center}>
         <Image
@@ -191,6 +208,25 @@ const LOGO_SIZE = 240;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  debugRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+  debugBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugText: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontWeight: '500',
+  },
   center: {
     flex: 1,
     alignItems: 'center',

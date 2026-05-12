@@ -8,6 +8,7 @@ export const KEYS = {
   conversations: 'conversations.v1',
   currentConversationId: 'currentConversationId.v1',
   settings: 'settings.v1',
+  onboardingDone: 'onboardingDone.v1',
 } as const;
 
 export function readJSON<T>(key: string): T | undefined {
