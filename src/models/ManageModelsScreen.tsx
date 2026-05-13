@@ -20,6 +20,7 @@ import {
   refreshModels,
 } from './modelManager';
 import { colors, radii, spacing } from '../shared/theme';
+import { PencilIcon } from '../shared/icons';
 import { MLCModel } from '../shared/types';
 
 function humanBytes(bytes: number): string {
@@ -33,6 +34,7 @@ export function ManageModelsScreen() {
   const models = useModelStore(s => s.models);
   const selectedModelId = useModelStore(s => s.selectedModelId);
   const selectModel = useModelStore(s => s.selectModel);
+  const renameModel = useModelStore(s => s.renameModel);
   const [usage, setUsage] = useState(0);
   const [importing, setImporting] = useState(false);
 
@@ -61,6 +63,19 @@ export function ManageModelsScreen() {
 
   const onSelect = (model: MLCModel) => {
     selectModel(model.id);
+  };
+
+  const onRename = (model: MLCModel) => {
+    Alert.prompt(
+      'Rename Model',
+      'Enter a new display name:',
+      (name: string) => {
+        const trimmed = name.trim();
+        if (trimmed) renameModel(model.id, trimmed);
+      },
+      'plain-text',
+      model.displayName,
+    );
   };
 
   const onImport = async () => {
@@ -161,6 +176,9 @@ export function ManageModelsScreen() {
                     <Text style={[styles.cardName, isSelected && styles.cardNameActive]} numberOfLines={1}>
                       {item.displayName}
                     </Text>
+                    <Pressable onPress={() => onRename(item)} hitSlop={8} style={styles.renameBtn}>
+                      <PencilIcon size={14} color={colors.textDim} />
+                    </Pressable>
                     {isSelected && (
                       <View style={styles.activePill}>
                         <Text style={styles.activeText}>Active</Text>
@@ -373,6 +391,9 @@ const styles = StyleSheet.create({
   },
   cardNameActive: {
     color: '#FFFFFF',
+  },
+  renameBtn: {
+    padding: 4,
   },
   cardSize: {
     color: colors.textDim,

@@ -10,6 +10,7 @@ interface ModelState {
   hydrate: () => void;
   setModels: (models: MLCModel[]) => void;
   upsertModel: (model: MLCModel) => void;
+  renameModel: (id: string, displayName: string) => void;
   removeModel: (id: string) => void;
   selectModel: (id: string | undefined) => void;
   selectedModel: () => MLCModel | undefined;
@@ -33,6 +34,12 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   upsertModel: model => {
     const next = [...get().models.filter(m => m.id !== model.id), model];
+    writeJSON(KEYS.models, next);
+    set({ models: next });
+  },
+
+  renameModel: (id, displayName) => {
+    const next = get().models.map(m => (m.id === id ? { ...m, displayName } : m));
     writeJSON(KEYS.models, next);
     set({ models: next });
   },
