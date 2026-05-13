@@ -80,7 +80,8 @@ export function ManageModelsScreen() {
         refresh();
       }
     } catch (err: any) {
-      if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
+      const code = err?.code ?? '';
+      if (code !== 'DOCUMENT_PICKER_CANCELED' && code !== 'OPERATION_CANCELED') {
         Alert.alert('Import failed', err?.message ?? String(err));
       }
     } finally {

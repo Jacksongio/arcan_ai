@@ -77,7 +77,10 @@ export async function importGGUFFromPicker(): Promise<MLCModel | null> {
   if (useModelStore.getState().models.length >= MAX_MODELS) {
     throw new Error(`You can store up to ${MAX_MODELS} models. Delete one before adding another.`);
   }
-  const [picked] = await pick({ mode: 'import' });
+  const [picked] = await pick({
+    mode: 'import',
+    type: ['public.data'],
+  });
   if (!picked) return null;
 
   await ensureModelsDir();
