@@ -3,8 +3,8 @@ set -e
 
 brew install node cocoapods
 
-# Make node available to Xcode build phases
-ln -sf $(which node) /usr/local/bin/node
+export PATH="/usr/local/bin:$PATH"
+eval "$(brew shellenv)"
 
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 npm install
