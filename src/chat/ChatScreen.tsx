@@ -30,6 +30,8 @@ import { RootStackParamList } from '../navigation/RootNavigator';
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Chat'>;
 type Route = RouteProp<RootStackParamList, 'Chat'>;
 
+const MAX_INPUT_CHARS = 4000;
+
 export function ChatScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
@@ -150,7 +152,7 @@ export function ChatScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
         <FlatList
           ref={listRef}
@@ -186,6 +188,7 @@ export function ChatScreen() {
               multiline
               editable={!busy}
               returnKeyType="default"
+              maxLength={MAX_INPUT_CHARS}
             />
             {busy ? (
               <Pressable onPress={onCancel} style={styles.stopBtn}>
@@ -200,6 +203,14 @@ export function ChatScreen() {
               </Pressable>
             )}
           </View>
+          {input.length >= MAX_INPUT_CHARS * 0.9 && (
+            <Text style={[
+              styles.charCount,
+              input.length >= MAX_INPUT_CHARS && styles.charCountLimit,
+            ]}>
+              {input.length} / {MAX_INPUT_CHARS}
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -303,6 +314,16 @@ const styles = StyleSheet.create({
 
   listContent: { paddingVertical: spacing.md, flexGrow: 1 },
 
+  charCount: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  charCountLimit: {
+    color: colors.danger,
+  },
   inputWrapper: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
@@ -341,15 +362,16 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 8 : 6,
   },
   sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: Platform.OS === 'ios' ? 34 : 28,
+    height: Platform.OS === 'ios' ? 34 : 28,
+    borderRadius: Platform.OS === 'ios' ? 17 : 14,
     backgroundColor: glass.surfaceHigh,
     borderWidth: 1,
     borderColor: glass.edge,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Platform.OS === 'ios' ? 3 : 0,
+    alignSelf: 'center',
   },
   sendBtnActive: {
     backgroundColor: colors.accent,
@@ -361,7 +383,7 @@ const styles = StyleSheet.create({
   },
   sendArrow: {
     color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: Platform.OS === 'ios' ? 19 : 16,
     fontWeight: '700',
     marginTop: -1,
   },
@@ -369,13 +391,14 @@ const styles = StyleSheet.create({
     color: colors.textDim,
   },
   stopBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: Platform.OS === 'ios' ? 34 : 28,
+    height: Platform.OS === 'ios' ? 34 : 28,
+    borderRadius: Platform.OS === 'ios' ? 17 : 14,
     backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Platform.OS === 'ios' ? 3 : 0,
+    alignSelf: 'center',
     shadowColor: colors.danger,
     shadowOpacity: 0.5,
     shadowRadius: 10,

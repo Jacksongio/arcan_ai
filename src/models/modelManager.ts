@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { keepLocalCopy, pick } from '@react-native-documents/picker';
 import { MLCModel, parseModelFilename } from '../shared/types';
@@ -65,9 +66,17 @@ function buildModel(filePath: string, sizeBytes: number): MLCModel {
 /** Re-scan the documents/models directory and update the store. */
 export async function refreshModels(): Promise<MLCModel[]> {
   await ensureModelsDir();
+  const existing = useModelStore.getState().models;
   const entries = await RNFS.readDir(MODELS_DIR);
   const ggufs = entries.filter(e => e.isFile() && e.name.toLowerCase().endsWith('.gguf'));
-  const models = ggufs.map(e => buildModel(e.path, Number(e.size) || 0));
+  const models = ggufs.map(e => {
+    const model = buildModel(e.path, Number(e.size) || 0);
+    const prev = existing.find(m => m.id === model.id);
+    if (prev?.displayName && prev.displayName !== model.displayName) {
+      model.displayName = prev.displayName;
+    }
+    return model;
+  });
   useModelStore.getState().setModels(models);
   return models;
 }
@@ -79,7 +88,7 @@ export async function importGGUFFromPicker(): Promise<MLCModel | null> {
   }
   const [picked] = await pick({
     mode: 'import',
-    type: ['public.data'],
+    type: Platform.OS === 'ios' ? ['public.data'] : ['application/octet-stream'],
   });
   if (!picked) return null;
 

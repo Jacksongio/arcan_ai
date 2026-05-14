@@ -3,9 +3,11 @@ import {
   Alert,
   FlatList,
   Linking,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,6 +39,8 @@ export function ManageModelsScreen() {
   const renameModel = useModelStore(s => s.renameModel);
   const [usage, setUsage] = useState(0);
   const [importing, setImporting] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<MLCModel | null>(null);
+  const [renameText, setRenameText] = useState('');
 
   const refresh = async () => {
     await refreshModels();
@@ -66,16 +70,14 @@ export function ManageModelsScreen() {
   };
 
   const onRename = (model: MLCModel) => {
-    Alert.prompt(
-      'Rename Model',
-      'Enter a new display name:',
-      (name: string) => {
-        const trimmed = name.trim();
-        if (trimmed) renameModel(model.id, trimmed);
-      },
-      'plain-text',
-      model.displayName,
-    );
+    setRenameText(model.displayName);
+    setRenameTarget(model);
+  };
+
+  const confirmRename = () => {
+    const trimmed = renameText.trim();
+    if (trimmed && renameTarget) renameModel(renameTarget.id, trimmed);
+    setRenameTarget(null);
   };
 
   const onImport = async () => {
@@ -235,6 +237,32 @@ export function ManageModelsScreen() {
           <Text style={styles.browseText}>Browse Hugging Face</Text>
         </Pressable>
       </View>
+
+      <Modal visible={renameTarget !== null} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setRenameTarget(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Rename Model</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={renameText}
+              onChangeText={setRenameText}
+              autoFocus
+              selectTextOnFocus
+              placeholderTextColor={colors.textDim}
+              selectionColor={colors.accent}
+              onSubmitEditing={confirmRename}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable onPress={() => setRenameTarget(null)} style={styles.modalBtn}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={confirmRename} style={styles.modalBtn}>
+                <Text style={styles.modalConfirm}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -519,4 +547,57 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   btnDisabled: { opacity: 0.45 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.bgElev,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: spacing.md,
+  },
+  modalInput: {
+    backgroundColor: colors.bg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: spacing.md,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.md,
+  },
+  modalBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  modalCancel: {
+    color: colors.textDim,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalConfirm: {
+    color: colors.accent,
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });
