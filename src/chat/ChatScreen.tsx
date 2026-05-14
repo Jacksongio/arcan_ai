@@ -25,12 +25,12 @@ import {
   isGenerating,
   sendMessage,
 } from './chatEngine';
-import { AttachedFile, pickAndReadFile } from './fileReader';
-import { PaperclipIcon, FileIcon, XIcon } from '../shared/icons';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Chat'>;
 type Route = RouteProp<RootStackParamList, 'Chat'>;
+
+const MAX_INPUT_CHARS = 4000;
 
 export function ChatScreen() {
   const nav = useNavigation<Nav>();
@@ -47,7 +47,6 @@ export function ChatScreen() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [attachment, setAttachment] = useState<AttachedFile | null>(null);
   const listRef = useRef<FlatList<any>>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -87,18 +86,6 @@ export function ChatScreen() {
 
   useEffect(scrollToEnd, [messages.length, scrollToEnd]);
 
-  const onAttach = async () => {
-    if (busy) return;
-    try {
-      const file = await pickAndReadFile();
-      if (file) setAttachment(file);
-    } catch (err: any) {
-      if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
-        Alert.alert('Could not read file', err?.message ?? String(err));
-      }
-    }
-  };
-
   const onSend = async () => {
     if (!input.trim() || busy || isGenerating()) return;
     if (!selectedModel) {
@@ -107,11 +94,7 @@ export function ChatScreen() {
     }
     HapticFeedback.trigger('impactLight');
     let text = input;
-    if (attachment) {
-      text = `[File: ${attachment.name}]\n\`\`\`\n${attachment.content}\n\`\`\`\n\n${text}`;
-    }
     setInput('');
-    setAttachment(null);
     setBusy(true);
     try {
       await sendMessage({
@@ -144,7 +127,7 @@ export function ChatScreen() {
   };
 
   const headerTitle = useMemo(() => selectedModel?.displayName ?? 'No model', [selectedModel]);
-  const canSend = input.trim().length > 0 || attachment !== null;
+  const canSend = input.trim().length > 0;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -169,7 +152,7 @@ export function ChatScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
         <FlatList
           ref={listRef}
@@ -190,25 +173,9 @@ export function ChatScreen() {
         />
 
         <View style={styles.inputWrapper}>
-          {attachment && (
-            <View style={styles.attachChip}>
-              <FileIcon size={14} color={colors.accent} />
-              <Text style={styles.attachName} numberOfLines={1}>{attachment.name}</Text>
-              <Pressable onPress={() => setAttachment(null)} hitSlop={8}>
-                <XIcon size={14} color={colors.textDim} />
-              </Pressable>
-            </View>
-          )}
           <View style={[styles.inputGlass, focused && styles.inputGlassFocused]}>
             <View pointerEvents="none" style={styles.glassEdgeTop} />
             <View pointerEvents="none" style={styles.glassEdgeBottom} />
-            <Pressable
-              onPress={onAttach}
-              hitSlop={6}
-              disabled={busy}
-              style={styles.attachBtn}>
-              <PaperclipIcon size={20} color={busy ? colors.textDim : colors.accent} />
-            </Pressable>
             <TextInput
               ref={inputRef}
               value={input}
@@ -221,6 +188,7 @@ export function ChatScreen() {
               multiline
               editable={!busy}
               returnKeyType="default"
+              maxLength={MAX_INPUT_CHARS}
             />
             {busy ? (
               <Pressable onPress={onCancel} style={styles.stopBtn}>
@@ -235,6 +203,14 @@ export function ChatScreen() {
               </Pressable>
             )}
           </View>
+          {input.length >= MAX_INPUT_CHARS * 0.9 && (
+            <Text style={[
+              styles.charCount,
+              input.length >= MAX_INPUT_CHARS && styles.charCountLimit,
+            ]}>
+              {input.length} / {MAX_INPUT_CHARS}
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -338,33 +314,20 @@ const styles = StyleSheet.create({
 
   listContent: { paddingVertical: spacing.md, flexGrow: 1 },
 
+  charCount: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  charCountLimit: {
+    color: colors.danger,
+  },
   inputWrapper: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-  },
-  attachChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(138, 107, 255, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(138, 107, 255, 0.2)',
-    borderRadius: radii.md,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 6,
-    alignSelf: 'flex-start',
-  },
-  attachName: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '500',
-    maxWidth: 200,
-  },
-  attachBtn: {
-    paddingVertical: 6,
-    paddingRight: 2,
   },
   inputGlass: {
     flexDirection: 'row',
@@ -399,15 +362,16 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 8 : 6,
   },
   sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: Platform.OS === 'ios' ? 34 : 28,
+    height: Platform.OS === 'ios' ? 34 : 28,
+    borderRadius: Platform.OS === 'ios' ? 17 : 14,
     backgroundColor: glass.surfaceHigh,
     borderWidth: 1,
     borderColor: glass.edge,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Platform.OS === 'ios' ? 3 : 0,
+    alignSelf: 'center',
   },
   sendBtnActive: {
     backgroundColor: colors.accent,
@@ -419,7 +383,7 @@ const styles = StyleSheet.create({
   },
   sendArrow: {
     color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: Platform.OS === 'ios' ? 19 : 16,
     fontWeight: '700',
     marginTop: -1,
   },
@@ -427,13 +391,14 @@ const styles = StyleSheet.create({
     color: colors.textDim,
   },
   stopBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: Platform.OS === 'ios' ? 34 : 28,
+    height: Platform.OS === 'ios' ? 34 : 28,
+    borderRadius: Platform.OS === 'ios' ? 17 : 14,
     backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Platform.OS === 'ios' ? 3 : 0,
+    alignSelf: 'center',
     shadowColor: colors.danger,
     shadowOpacity: 0.5,
     shadowRadius: 10,

@@ -72,6 +72,12 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localProps.load(new FileInputStream(localPropsFile))
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -79,11 +85,11 @@ android {
 
     namespace "com.arcanai"
     defaultConfig {
-        applicationId "com.arcanai"
+        applicationId "com.arcan_ai.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 6
+        versionName "2.0.0"
     }
     signingConfigs {
         debug {
@@ -92,15 +98,19 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            storeFile file(localProps['MYAPP_UPLOAD_STORE_FILE'] ?: 'debug.keystore')
+            storePassword localProps['MYAPP_UPLOAD_STORE_PASSWORD'] ?: ''
+            keyAlias localProps['MYAPP_UPLOAD_KEY_ALIAS'] ?: ''
+            keyPassword localProps['MYAPP_UPLOAD_KEY_PASSWORD'] ?: ''
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
