@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -49,11 +50,43 @@ export function ChatScreen() {
   const [focused, setFocused] = useState(false);
   const listRef = useRef<FlatList<any>>(null);
   const inputRef = useRef<TextInput>(null);
+  const skipAnimationUntil = useRef(0);
+  const scrollThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScroll = useRef(false);
 
-  const scrollToEnd = useCallback(() => {
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: true });
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        skipAnimationUntil.current = Date.now() + 500;
+        listRef.current?.scrollToEnd({ animated: false });
+      }
     });
+    return () => sub.remove();
+  }, []);
+
+  const scrollToEnd = useCallback((animated = true) => {
+    const shouldAnimate = animated && Date.now() >= skipAnimationUntil.current;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: shouldAnimate });
+    });
+  }, []);
+
+  const throttledScrollToEnd = useCallback(() => {
+    pendingScroll.current = true;
+    if (scrollThrottleRef.current) return;
+    scrollThrottleRef.current = setTimeout(() => {
+      scrollThrottleRef.current = null;
+      if (pendingScroll.current) {
+        pendingScroll.current = false;
+        scrollToEnd();
+      }
+    }, 80);
+  }, [scrollToEnd]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollThrottleRef.current) clearTimeout(scrollThrottleRef.current);
+    };
   }, []);
 
   const onEditMessage = useCallback(async (messageId: string, newContent: string) => {
@@ -65,14 +98,14 @@ export function ChatScreen() {
         conversationId,
         model: selectedModel,
         userInput: newContent,
-        onAssistantToken: () => scrollToEnd(),
+        onAssistantToken: () => throttledScrollToEnd(),
       });
     } catch (err: any) {
       console.warn('sendMessage failed', err?.message ?? err);
     } finally {
       setBusy(false);
     }
-  }, [busy, conversationId, selectedModel, truncateFromMessage, scrollToEnd]);
+  }, [busy, conversationId, selectedModel, truncateFromMessage, throttledScrollToEnd]);
 
   useEffect(() => {
     if (selectedModel) {
@@ -101,7 +134,7 @@ export function ChatScreen() {
         conversationId,
         model: selectedModel,
         userInput: text,
-        onAssistantToken: () => scrollToEnd(),
+        onAssistantToken: () => throttledScrollToEnd(),
       });
     } catch (err: any) {
       console.warn('sendMessage failed', err?.message ?? err);
@@ -165,7 +198,7 @@ export function ChatScreen() {
             />
           )}
           contentContainerStyle={styles.listContent}
-          onContentSizeChange={scrollToEnd}
+          onContentSizeChange={throttledScrollToEnd}
           ListEmptyComponent={<EmptyChat onSuggestion={(text) => {
             setInput(text);
             setTimeout(() => inputRef.current?.focus(), 100);
