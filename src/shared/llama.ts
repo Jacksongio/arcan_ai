@@ -75,13 +75,13 @@ export async function loadModel(opts: LoadOptions): Promise<LlamaContext> {
 
 export async function unloadModel(): Promise<void> {
   if (ctx) {
+    ctx = null;
+    loadedModelPath = null;
     try {
-      await ctx.release();
+      await releaseAllLlama();
     } catch {
       // ignore
     }
-    ctx = null;
-    loadedModelPath = null;
   }
 }
 
@@ -90,9 +90,10 @@ export function getLoadedPath(): string | null {
 }
 
 export async function complete(opts: CompletionOptions): Promise<string> {
-  if (!ctx) throw new Error('No model loaded');
+  const activeCtx = ctx;
+  if (!activeCtx) throw new Error('No model loaded');
 
-  const result = await ctx.completion(
+  const result = await activeCtx.completion(
     {
       prompt: opts.prompt,
       n_predict: opts.maxTokens ?? 512,
@@ -102,6 +103,7 @@ export async function complete(opts: CompletionOptions): Promise<string> {
       stop: opts.stop ?? [],
     },
     data => {
+      if (ctx !== activeCtx) return;
       if (data?.token && opts.onToken) {
         opts.onToken(data.token);
       }
