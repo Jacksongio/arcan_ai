@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  listContent: { paddingVertical: spacing.md, flexGrow: 1 },
+  listContent: { paddingTop: spacing.md, paddingBottom: 120, flexGrow: 1 },
 
   charCount: {
     color: colors.textDim,

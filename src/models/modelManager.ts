@@ -93,7 +93,9 @@ export async function importGGUFFromPicker(): Promise<MLCModel | null> {
   if (!picked) return null;
 
   await ensureModelsDir();
-  const filename = picked.name ?? `model-${Date.now()}.gguf`;
+  const fallbackName = decodeURIComponent(picked.uri.split('/').pop() ?? '');
+  const filename = picked.name
+    ?? (fallbackName.toLowerCase().endsWith('.gguf') ? fallbackName : `model-${Date.now()}.gguf`);
   if (!filename.toLowerCase().endsWith('.gguf')) {
     throw new Error('Only .gguf model files are supported.');
   }
