@@ -99,12 +99,6 @@ export async function sendMessage(opts: SendOptions): Promise<Message> {
       stop: stopTokens,
       onToken: token => {
         buffer += token;
-        const cleaned = stripSpecialTokens(buffer);
-        opts.onAssistantToken?.(cleaned);
-        useChatStore.getState().updateMessage(opts.conversationId, assistantMsg.id, m => ({
-          ...m,
-          content: cleaned,
-        }));
       },
     });
 

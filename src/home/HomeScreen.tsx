@@ -184,6 +184,12 @@ function SetupSheet({
           <Text style={sheet.secondaryText}>{importing ? 'Importing…' : 'Import a .gguf file'}</Text>
         </Pressable>
 
+        <View style={sheet.warning}>
+          <Text style={sheet.warningText}>
+            Smaller models are faster but more likely to hallucinate. For more accurate responses, choose a larger model if your device can handle it.
+          </Text>
+        </View>
+
         <Text style={sheet.section}>RECOMMENDED STARTERS</Text>
         {RECOMMENDED_MODELS.map(r => (
           <Pressable
@@ -346,5 +352,18 @@ const sheet = StyleSheet.create({
   recMeta: { color: colors.accent, fontSize: 13, marginTop: 2 },
   recNote: { color: colors.textDim, fontSize: 13, marginTop: 4, lineHeight: 18 },
 
+  warning: {
+    backgroundColor: 'rgba(255, 92, 122, 0.08)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 92, 122, 0.2)',
+    marginTop: spacing.sm,
+  },
+  warningText: {
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   help: { color: colors.textDim, fontSize: 13, marginTop: spacing.md, lineHeight: 18 },
 });

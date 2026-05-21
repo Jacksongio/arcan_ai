@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import HapticFeedback from 'react-native-haptic-feedback';
 import { Message } from '../shared/types';
@@ -80,7 +80,7 @@ export function MessageBubble({ message, onEdit }: Props) {
 
   return (
     <View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
-      <View style={styles.bubbleCol}>
+      <View style={[styles.bubbleCol, !isUser && !message.isStreaming && styles.bubbleColAssistant]}>
         <Pressable
           onLongPress={onCopy}
           style={({ pressed }) => [
@@ -94,17 +94,10 @@ export function MessageBubble({ message, onEdit }: Props) {
             <Text style={styles.userText} selectable>
               {message.content}
             </Text>
-          ) : message.isStreaming && !message.content ? (
-            <View style={styles.generatingRow}>
-              <View style={styles.generatingDot} />
-              <View style={[styles.generatingDot, styles.generatingDot2]} />
-              <View style={[styles.generatingDot, styles.generatingDot3]} />
-              <Text style={styles.generating}>Generating</Text>
-            </View>
+          ) : message.isStreaming ? (
+            <ThinkingIndicator />
           ) : (
-            <MarkdownText
-              content={message.isStreaming ? message.content.trimEnd() : message.content}
-            />
+            <MarkdownText content={message.content} />
           )}
         </Pressable>
         {showActions && (
@@ -128,6 +121,94 @@ export function MessageBubble({ message, onEdit }: Props) {
   );
 }
 
+const THINKING_WORDS = [
+  'Fuzzwuzzling',
+  'Cogitating',
+  'Rumbling neurons',
+  'Herding photons',
+  'Wrangling tokens',
+  'Percolating thoughts',
+  'Tickling synapses',
+  'Consulting the void',
+  'Untangling logic',
+  'Simmering ideas',
+  'Juggling qubits',
+  'Whispering to silicon',
+  'Aligning stars',
+  'Brewing brilliance',
+  'Poking the matrix',
+];
+
+function ThinkingIndicator() {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * THINKING_WORDS.length));
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const shimmerAnim = useRef(new Animated.Value(-1)).current;
+
+  useEffect(() => {
+    const cycle = () => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start(() => {
+        setIndex(prev => (prev + 1) % THINKING_WORDS.length);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          easing: Easing.in(Easing.ease),
+          useNativeDriver: true,
+        }).start();
+      });
+    };
+    const interval = setInterval(cycle, 2000);
+    return () => clearInterval(interval);
+  }, [fadeAnim]);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 2,
+        duration: 1500,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [-1, 2],
+    outputRange: [-80, 200],
+  });
+
+  const shimmerOpacity = shimmerAnim.interpolate({
+    inputRange: [-1, 0, 1, 2],
+    outputRange: [0, 0.6, 0.6, 0],
+  });
+
+  return (
+    <View style={styles.thinkingTextWrap}>
+      <Animated.Text style={[styles.thinkingText, { opacity: fadeAnim }]}>
+        {THINKING_WORDS[index]}...
+      </Animated.Text>
+      <Animated.Text
+        style={[
+          styles.thinkingTextHighlight,
+          { opacity: fadeAnim },
+        ]}>
+        <Animated.Text
+          style={{
+            opacity: shimmerOpacity,
+          }}>
+          {THINKING_WORDS[index]}...
+        </Animated.Text>
+      </Animated.Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   row: {
     paddingHorizontal: spacing.md,
@@ -140,7 +221,10 @@ const styles = StyleSheet.create({
   rowEnd: { justifyContent: 'flex-end' },
 
   bubbleCol: {
-    maxWidth: '80%',
+    maxWidth: '85%',
+  },
+  bubbleColAssistant: {
+    width: '85%',
   },
   bubble: {
     paddingHorizontal: 15,
@@ -181,25 +265,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-  generatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  thinkingTextWrap: {
+    position: 'relative',
   },
-  generatingDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.accent,
-    opacity: 0.9,
-  },
-  generatingDot2: { opacity: 0.6 },
-  generatingDot3: { opacity: 0.35, marginRight: 4 },
-  generating: {
-    color: colors.textDim,
+  thinkingText: {
+    color: colors.accent,
     fontSize: 13,
     fontStyle: 'italic',
-    marginLeft: 2,
+  },
+  thinkingTextHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: '#FFFFFF',
   },
   actionRow: {
     flexDirection: 'row',

@@ -201,6 +201,7 @@ export function ChatScreen() {
             />
           )}
           contentContainerStyle={styles.listContent}
+          keyboardDismissMode="interactive"
           onContentSizeChange={throttledScrollToEnd}
           ListEmptyComponent={<EmptyChat onSuggestion={(text) => {
             setInput(text);
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  listContent: { paddingTop: spacing.md, paddingBottom: 120, flexGrow: 1 },
+  listContent: { paddingTop: spacing.md, paddingBottom: spacing.sm, flexGrow: 1 },
 
   charCount: {
     color: colors.textDim,
