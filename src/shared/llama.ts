@@ -23,6 +23,7 @@ export interface CompletionOptions {
 let ctx: LlamaContext | null = null;
 let loadedModelPath: string | null = null;
 let loadingPromise: Promise<LlamaContext> | null = null;
+let activeCompletion: Promise<any> | null = null;
 
 /**
  * Pick GPU offload layer count. Conservative on iOS simulator (no Metal),
@@ -49,6 +50,9 @@ export async function loadModel(opts: LoadOptions): Promise<LlamaContext> {
 
   const promise = (async () => {
     await stopCompletion();
+    if (activeCompletion) {
+      try { await activeCompletion; } catch { /* ignore */ }
+    }
     if (ctx) {
       await unloadModel();
     }
@@ -74,11 +78,12 @@ export async function loadModel(opts: LoadOptions): Promise<LlamaContext> {
 }
 
 export async function unloadModel(): Promise<void> {
-  if (ctx) {
+  const toRelease = ctx;
+  if (toRelease) {
     ctx = null;
     loadedModelPath = null;
     try {
-      await releaseAllLlama();
+      await toRelease.release();
     } catch {
       // ignore
     }
@@ -93,7 +98,7 @@ export async function complete(opts: CompletionOptions): Promise<string> {
   const activeCtx = ctx;
   if (!activeCtx) throw new Error('No model loaded');
 
-  const result = await activeCtx.completion(
+  const completionPromise = activeCtx.completion(
     {
       prompt: opts.prompt,
       n_predict: opts.maxTokens ?? 512,
@@ -109,7 +114,16 @@ export async function complete(opts: CompletionOptions): Promise<string> {
       }
     },
   );
-  return result.text;
+
+  activeCompletion = completionPromise;
+  try {
+    const result = await completionPromise;
+    return result.text;
+  } finally {
+    if (activeCompletion === completionPromise) {
+      activeCompletion = null;
+    }
+  }
 }
 
 export async function stopCompletion(): Promise<void> {
