@@ -52,6 +52,9 @@ export async function ensureModelLoaded(model: MLCModel): Promise<void> {
     throw new Error('Model has no file path on disk');
   }
   if (getLoadedPath() === model.filePath) return;
+  if (inFlight) {
+    await cancelGeneration();
+  }
   await loadModel({
     modelPath: model.filePath,
     contextSize: Math.max(model.recommendedCtx ?? MIN_CTX, MIN_CTX),

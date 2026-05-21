@@ -113,6 +113,9 @@ export function ChatScreen() {
         Alert.alert('Could not load model', err?.message ?? String(err));
       });
     }
+    return () => {
+      cancelGeneration();
+    };
   }, [selectedModel]);
 
   const messages = conversation?.messages ?? [];

@@ -22,6 +22,7 @@ export interface CompletionOptions {
 
 let ctx: LlamaContext | null = null;
 let loadedModelPath: string | null = null;
+let loadingPromise: Promise<LlamaContext> | null = null;
 
 /**
  * Pick GPU offload layer count. Conservative on iOS simulator (no Metal),
@@ -39,18 +40,37 @@ export async function loadModel(opts: LoadOptions): Promise<LlamaContext> {
   if (ctx && loadedModelPath === opts.modelPath) {
     return ctx;
   }
-  if (ctx) {
-    await unloadModel();
+  if (loadingPromise) {
+    await loadingPromise;
+    if (ctx && loadedModelPath === opts.modelPath) {
+      return ctx;
+    }
   }
-  ctx = await initLlama({
-    model: opts.modelPath,
-    n_ctx: opts.contextSize ?? 4096,
-    n_batch: opts.batchSize ?? 512,
-    n_gpu_layers: opts.gpuLayers ?? defaultGpuLayers(),
-    embedding: opts.embedding ?? false,
-  });
-  loadedModelPath = opts.modelPath;
-  return ctx;
+
+  const promise = (async () => {
+    await stopCompletion();
+    if (ctx) {
+      await unloadModel();
+    }
+    ctx = await initLlama({
+      model: opts.modelPath,
+      n_ctx: opts.contextSize ?? 4096,
+      n_batch: opts.batchSize ?? 512,
+      n_gpu_layers: opts.gpuLayers ?? defaultGpuLayers(),
+      embedding: opts.embedding ?? false,
+    });
+    loadedModelPath = opts.modelPath;
+    return ctx;
+  })();
+
+  loadingPromise = promise;
+  try {
+    return await promise;
+  } finally {
+    if (loadingPromise === promise) {
+      loadingPromise = null;
+    }
+  }
 }
 
 export async function unloadModel(): Promise<void> {
